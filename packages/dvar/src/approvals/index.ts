@@ -15,6 +15,10 @@ export {
 } from "./grant.js";
 export { InMemoryApprovalUseStore } from "./store.js";
 export {
+  createWebhookApprovalProvider,
+  type WebhookApprovalProviderOptions
+} from "./webhook.js";
+export {
   processApprovalDecision,
   submitApprovalRequest,
   type DvarApprovalProcessingOptions
