@@ -35,6 +35,18 @@ export const DVAR_POLICY_SCHEMA = {
         }
       }
     },
+    integrity: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        requireLockfile: { type: "boolean" },
+        onUnknownServer: { enum: ["allow", "deny", "require_approval"] },
+        onUnknownTool: { enum: ["allow", "deny", "require_approval"] },
+        onDescriptionChange: { enum: ["allow", "deny", "require_approval"] },
+        onSchemaChange: { enum: ["allow", "deny", "require_approval"] },
+        onCapabilityExpansion: { enum: ["allow", "deny", "require_approval"] }
+      }
+    },
     rules: {
       type: "array",
       items: { $ref: "#/$defs/rule" }

@@ -14,6 +14,7 @@ import type {
 } from "../types.js";
 
 interface GuardrailFailure {
+  effect?: Exclude<DvarEffect, "allow">;
   ruleId: string;
   reasonCode: string;
   message: string;
@@ -112,7 +113,7 @@ export function evaluatePolicy(
   let obligations = [] as DvarDecision["obligations"];
 
   if (guardrail !== undefined) {
-    underlyingEffect = "deny";
+    underlyingEffect = guardrail.effect ?? "deny";
     ({ ruleId, reasonCode, message } = guardrail);
   } else {
     const matchingRules = (policy.rules ?? []).filter(
