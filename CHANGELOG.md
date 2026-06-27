@@ -2,6 +2,32 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
+## 0.3.0-alpha.0
+
+### Added
+
+- Structured approval requests containing attributable action, policy, risk, scope, expiry, and binding data.
+- HMAC-SHA256 signed approval grants with constant-time verification.
+- Bounded `once`, `session`, and `task` approval scopes.
+- Stable semantic action hashing for interruption and resume flows.
+- Pluggable approval-use store with an in-memory reference implementation.
+- Runtime `createApprovalRequest`, `requestApproval`, and `resume` APIs.
+- Automatic protected-tool provider submission and immediate-grant resume.
+- Webhook approval-provider reference implementation.
+- Approval-aware MCP proxy with delayed-grant header consumption.
+- Structural OpenAI Agents interruption helpers.
+- `@rokadhq/dvar/approvals` and `@rokadhq/dvar/adapters/openai-agents` exports.
+- Approval lifecycle audit events.
+
+### Security
+
+- Grants bind policy hash/version, rule, scope, identity, environment, tool, and configured action fields.
+- One-time grants are single-use and action-exact by default.
+- Expiry and use counts cannot exceed the originating request.
+- Replayed, modified, expired, or context-mismatched grants are rejected before execution.
+- Approval grants are omitted from default audit events and removed before MCP forwarding.
+- Strict mode fails closed when an approval provider is unavailable.
+
 ## 0.2.0-alpha.0
 
 ### Added
