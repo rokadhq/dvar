@@ -1,0 +1,32 @@
+{
+  "name": "dvar-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Development monorepo for Dvar, the policy firewall for AI agents.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@rokadhq/dvar",
+    "clean": "npm run clean --workspace=@rokadhq/dvar",
+    "test": "npm run test --workspace=@rokadhq/dvar",
+    "test:coverage": "npm run test:coverage --workspace=@rokadhq/dvar",
+    "typecheck": "npm run typecheck --workspace=@rokadhq/dvar",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@vitest/coverage-v8": "^3.2.4",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
+  }
+}

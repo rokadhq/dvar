@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm install --no-audit --no-fund
+      - run: npm run check
+      - run: npm audit --audit-level=high
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --workspace=@rokadhq/dvar --sbom-format=cyclonedx > sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dvar-sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
+      - run: npm publish --workspace=@rokadhq/dvar --provenance --access public
