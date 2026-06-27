@@ -1,0 +1,8 @@
+{
+  "name": "@dvar-examples/basic-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@rokadhq/dvar": "*"
+  }
+}

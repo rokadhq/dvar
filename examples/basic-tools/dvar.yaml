@@ -1,0 +1,19 @@
+schemaVersion: "1"
+version: "example"
+mode: monitor
+defaultEffect: deny
+identity:
+  require:
+    - principal.id
+    - agent.id
+    - tenant.id
+    - environment
+rules:
+  - id: customer.read-own-tenant
+    priority: 100
+    effect: allow
+    when:
+      tool.name: crm.read_customer
+    constraints:
+      resources.0.tenantId:
+        equalsContext: tenant.id
