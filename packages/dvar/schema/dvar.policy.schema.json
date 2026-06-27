@@ -96,6 +96,50 @@
         }
       }
     },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requireLockfile": {
+          "type": "boolean"
+        },
+        "onUnknownServer": {
+          "enum": [
+            "allow",
+            "deny",
+            "require_approval"
+          ]
+        },
+        "onUnknownTool": {
+          "enum": [
+            "allow",
+            "deny",
+            "require_approval"
+          ]
+        },
+        "onDescriptionChange": {
+          "enum": [
+            "allow",
+            "deny",
+            "require_approval"
+          ]
+        },
+        "onSchemaChange": {
+          "enum": [
+            "allow",
+            "deny",
+            "require_approval"
+          ]
+        },
+        "onCapabilityExpansion": {
+          "enum": [
+            "allow",
+            "deny",
+            "require_approval"
+          ]
+        }
+      }
+    },
     "rules": {
       "type": "array",
       "items": {
@@ -142,50 +186,6 @@
               }
             }
           }
-        }
-      }
-    },
-    "integrity": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "requireLockfile": {
-          "type": "boolean"
-        },
-        "onUnknownServer": {
-          "enum": [
-            "allow",
-            "deny",
-            "require_approval"
-          ]
-        },
-        "onUnknownTool": {
-          "enum": [
-            "allow",
-            "deny",
-            "require_approval"
-          ]
-        },
-        "onDescriptionChange": {
-          "enum": [
-            "allow",
-            "deny",
-            "require_approval"
-          ]
-        },
-        "onSchemaChange": {
-          "enum": [
-            "allow",
-            "deny",
-            "require_approval"
-          ]
-        },
-        "onCapabilityExpansion": {
-          "enum": [
-            "allow",
-            "deny",
-            "require_approval"
-          ]
         }
       }
     }
@@ -332,18 +332,36 @@
           "additionalProperties": false,
           "properties": {
             "provider": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             },
             "expiresInSeconds": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 86400
             },
             "bind": {
               "type": "array",
               "uniqueItems": true,
+              "maxItems": 32,
               "items": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
               }
+            },
+            "scope": {
+              "enum": [
+                "once",
+                "session",
+                "task"
+              ]
+            },
+            "maxUses": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
             }
           }
         },
