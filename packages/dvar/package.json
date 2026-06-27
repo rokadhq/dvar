@@ -1,6 +1,6 @@
 {
   "name": "@rokadhq/dvar",
-  "version": "0.1.0-alpha.0",
+  "version": "0.2.0-alpha.0",
   "description": "Policy firewall for AI agents, tool calls, and MCP connections.",
   "keywords": [
     "ai-agent",
@@ -28,6 +28,7 @@
     "schema",
     "docs",
     "README.md",
+    "CHANGELOG.md",
     "SECURITY.md",
     "SUPPORT.md",
     "API_STABILITY.md",
@@ -46,7 +47,12 @@
       "require": "./dist/index.cjs"
     },
     "./schema": "./schema/dvar.policy.schema.json",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./mcp": {
+      "types": "./dist/mcp.d.ts",
+      "import": "./dist/mcp.js",
+      "require": "./dist/mcp.cjs"
+    }
   },
   "scripts": {
     "build": "tsup",
