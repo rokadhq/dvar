@@ -1,5 +1,6 @@
 import type {
   DvarCircuitBreakerPolicy,
+  DvarCircuitState,
   DvarLoopDetectionPolicy,
   DvarRuntimeDiagnostics,
   DvarRuntimeQuotaPolicy,
@@ -39,6 +40,16 @@ declare module "../types.js" {
   interface DvarApprovalRequest {
     usage?: DvarRuntimeUsage;
     usageHash?: string;
+  }
+
+  interface DvarAuditEvent {
+    runtimeControl?: string;
+    runtimeStore?: string;
+    runtimeDistributed?: boolean;
+    runtimeCurrent?: number;
+    runtimeLimit?: number;
+    runtimeResetAt?: string;
+    runtimeCircuitState?: DvarCircuitState;
   }
 }
 
