@@ -162,12 +162,18 @@ function validatePositive(name: string, value: number | undefined): void {
   }
 }
 
+function validateNonNegative(name: string, value: number | undefined): void {
+  if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
+    throw new DvarConfigurationError(`${name} must be a non-negative finite number`);
+  }
+}
+
 function validateConfiguration(policy: DvarRuntimeSafetyPolicy): void {
   validatePositive("runtime.maxToolCallsPerTask", policy.maxToolCallsPerTask);
   validatePositive("runtime.maxToolCallsPerSession", policy.maxToolCallsPerSession);
   validatePositive("runtime.maxConsecutiveToolCalls", policy.maxConsecutiveToolCalls);
   validatePositive("runtime.maxDepth", policy.maxDepth);
-  validatePositive("runtime.maxRetries", policy.maxRetries);
+  validateNonNegative("runtime.maxRetries", policy.maxRetries);
   const ids = new Set<string>();
   for (const quota of policy.quotas ?? []) {
     if (ids.has(quota.id)) throw new DvarConfigurationError(`Duplicate runtime quota id: ${quota.id}`);
@@ -280,7 +286,9 @@ export function createRuntimeGuard(
       {
         current: result.failures,
         limit: breaker.failureThreshold,
-        resetAtMs: result.retryAtMs,
+        ...(result.retryAtMs !== undefined
+          ? { resetAtMs: result.retryAtMs }
+          : {}),
         circuitState: result.state
       }
     );
@@ -372,7 +380,7 @@ export function createRuntimeGuard(
         const result = await callStore(() => store.appendSequence({
           key: resolved.key!,
           value: action.tool.name,
-          maxEntries: policy.maxConsecutiveToolCalls! + 1,
+          maxEntries: policy.maxConsecutiveToolCalls + 1,
           ttlMs: DEFAULT_STATE_TTL_MS,
           nowMs: clock()
         }));
