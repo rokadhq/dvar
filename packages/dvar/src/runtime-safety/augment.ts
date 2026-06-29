@@ -10,14 +10,14 @@ import type {
 
 declare module "../types.js" {
   interface DvarRuntimePolicy {
-    onRuntimeStoreError?: "allow" | "deny";
-    requireDistributedStore?: boolean;
-    maxToolCallsPerSession?: number;
-    maxConsecutiveToolCalls?: number;
-    maxRetries?: number;
-    quotas?: DvarRuntimeQuotaPolicy[];
-    loopDetection?: DvarLoopDetectionPolicy;
-    circuitBreakers?: DvarCircuitBreakerPolicy[];
+    readonly onRuntimeStoreError?: "allow" | "deny";
+    readonly requireDistributedStore?: boolean;
+    readonly maxToolCallsPerSession?: number;
+    readonly maxConsecutiveToolCalls?: number;
+    readonly maxRetries?: number;
+    readonly quotas?: DvarRuntimeQuotaPolicy[];
+    readonly loopDetection?: DvarLoopDetectionPolicy;
+    readonly circuitBreakers?: DvarCircuitBreakerPolicy[];
   }
 
   interface DvarAction {
