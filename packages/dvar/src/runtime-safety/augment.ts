@@ -35,6 +35,11 @@ declare module "../types.js" {
   interface DvarDecision {
     runtimeSafety?: DvarRuntimeSafetySummary;
   }
+
+  interface DvarApprovalRequest {
+    usage?: DvarRuntimeUsage;
+    usageHash?: string;
+  }
 }
 
 export type { DvarRuntimeDiagnostics };
