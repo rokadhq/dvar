@@ -19,9 +19,25 @@ export const DVAR_POLICY_SCHEMA = {
         onOutputFilterError: { enum: ["allow", "deny"] },
         onTelemetryError: { enum: ["continue", "deny"] },
         onApprovalProviderError: { enum: ["allow", "deny"] },
+        onRuntimeStoreError: { enum: ["allow", "deny"] },
+        requireDistributedStore: { type: "boolean" },
         maxDecisionMs: { type: "integer", minimum: 1, maximum: 60000 },
         maxToolCallsPerTask: { type: "integer", minimum: 1 },
-        maxDepth: { type: "integer", minimum: 1 }
+        maxToolCallsPerSession: { type: "integer", minimum: 1 },
+        maxConsecutiveToolCalls: { type: "integer", minimum: 1 },
+        maxDepth: { type: "integer", minimum: 1, maximum: 256 },
+        maxRetries: { type: "integer", minimum: 0, maximum: 1000 },
+        quotas: {
+          type: "array",
+          maxItems: 128,
+          items: { $ref: "#/$defs/runtimeQuota" }
+        },
+        loopDetection: { $ref: "#/$defs/loopDetection" },
+        circuitBreakers: {
+          type: "array",
+          maxItems: 128,
+          items: { $ref: "#/$defs/circuitBreaker" }
+        }
       }
     },
     identity: {
@@ -104,6 +120,67 @@ export const DVAR_POLICY_SCHEMA = {
     matchRecord: {
       type: "object",
       additionalProperties: { $ref: "#/$defs/matchValue" }
+    },
+    runtimeScope: {
+      enum: [
+        "global",
+        "principal",
+        "agent",
+        "tenant",
+        "session",
+        "task",
+        "environment",
+        "server",
+        "tool",
+        "destination"
+      ]
+    },
+    runtimeScopes: {
+      type: "array",
+      minItems: 1,
+      maxItems: 10,
+      uniqueItems: true,
+      items: { $ref: "#/$defs/runtimeScope" }
+    },
+    runtimeQuota: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "metric", "limit", "windowSeconds"],
+      properties: {
+        id: { type: "string", minLength: 1, maxLength: 128, pattern: "^[a-zA-Z0-9._-]+$" },
+        metric: { enum: ["calls", "cost", "monetary"] },
+        limit: { type: "number", exclusiveMinimum: 0 },
+        windowSeconds: { type: "integer", minimum: 1, maximum: 2592000 },
+        scope: { $ref: "#/$defs/runtimeScopes" },
+        currency: { type: "string", minLength: 1, maxLength: 16 },
+        onMissing: { enum: ["zero", "deny"] },
+        when: { $ref: "#/$defs/matchRecord" }
+      }
+    },
+    loopDetection: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        enabled: { type: "boolean" },
+        windowSeconds: { type: "integer", minimum: 1, maximum: 86400 },
+        historySize: { type: "integer", minimum: 4, maximum: 256 },
+        maxRepeatedAction: { type: "integer", minimum: 1, maximum: 128 },
+        maxOscillations: { type: "integer", minimum: 1, maximum: 64 },
+        scope: { $ref: "#/$defs/runtimeScopes" }
+      }
+    },
+    circuitBreaker: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "failureThreshold", "recoverySeconds"],
+      properties: {
+        id: { type: "string", minLength: 1, maxLength: 128, pattern: "^[a-zA-Z0-9._-]+$" },
+        failureThreshold: { type: "integer", minimum: 1, maximum: 100000 },
+        recoverySeconds: { type: "integer", minimum: 1, maximum: 86400 },
+        halfOpenMaxCalls: { type: "integer", minimum: 1, maximum: 1000 },
+        scope: { $ref: "#/$defs/runtimeScopes" },
+        when: { $ref: "#/$defs/matchRecord" }
+      }
     },
     obligation: {
       type: "object",
