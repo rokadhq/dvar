@@ -65,6 +65,7 @@ export interface DvarRuntime {
   readonly lockfile?: DvarLockfile;
   evaluate(action: DvarAction, options?: DvarEvaluationOptions): Promise<DvarDecision>;
   authorize(action: DvarAction, options?: DvarEvaluationOptions): Promise<DvarDecision>;
+  commitRuntime(action: DvarAction, decision: DvarDecision): Promise<DvarDecision>;
   recordOutcome(action: DvarAction, outcome: DvarRuntimeOutcome): Promise<void>;
   diagnostics(): Promise<DvarRuntimeDiagnostics>;
   createApprovalRequest(action: DvarAction, decision?: DvarDecision): Promise<DvarApprovalRequest>;
@@ -226,6 +227,37 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const approvalUseStore = options.approval?.useStore ?? new InMemoryApprovalUseStore();
   const runtimeGuard = createRuntimeGuard(policy, options.runtimeSafety);
+  const runtimeStoreKind = options.runtimeSafety?.store?.kind ?? "memory";
+  const runtimeStoreDistributed = options.runtimeSafety?.store?.distributed ?? false;
+
+  async function commitRuntimeInternal(
+    action: DvarAction,
+    decision: DvarDecision
+  ): Promise<DvarDecision> {
+    if (decision.effect !== "allow") return decision;
+    try {
+      const runtimeFailure = await runtimeGuard.before(action);
+      if (runtimeFailure !== undefined) {
+        return runtimeFailureDecision(policy, decision, runtimeFailure);
+      }
+      return {
+        ...decision,
+        runtimeSafety: {
+          status: "allowed",
+          control: "runtimeGuard",
+          store: runtimeStoreKind,
+          distributed: runtimeStoreDistributed
+        }
+      };
+    } catch (error) {
+      return runtimeStoreFailureDecision(
+        policy,
+        decision,
+        () => runtimeGuard.diagnostics(),
+        error
+      );
+    }
+  }
 
   async function evaluateInternal(
     action: DvarAction,
@@ -266,31 +298,8 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
         useStore: approvalUseStore
       });
 
-      if (evaluateOptions.commitRuntime === true && decision.effect === "allow") {
-        try {
-          const runtimeFailure = await runtimeGuard.before(action);
-          if (runtimeFailure !== undefined) {
-            decision = runtimeFailureDecision(policy, decision, runtimeFailure);
-          } else {
-            const diagnostics = await runtimeGuard.diagnostics();
-            decision = {
-              ...decision,
-              runtimeSafety: {
-                status: "allowed",
-                control: "runtimeGuard",
-                store: diagnostics.store.kind,
-                distributed: diagnostics.store.distributed
-              }
-            };
-          }
-        } catch (error) {
-          decision = await runtimeStoreFailureDecision(
-            policy,
-            decision,
-            () => runtimeGuard.diagnostics(),
-            error
-          );
-        }
+      if (evaluateOptions.commitRuntime === true) {
+        decision = await commitRuntimeInternal(action, decision);
       }
 
       await emitSafely(options.eventSink, decisionEvent(action, decision));
@@ -403,18 +412,21 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
       if (requiresApproval(decision)) {
         const request = decision.approvalRequest ?? await createRequest(action, decision);
         if (options.approval?.provider !== undefined && options.approval.autoRequest !== false) {
-          let providerResult: DvarApprovalProviderResult;
+          let providerResult: DvarApprovalProviderResult | undefined;
           try {
             providerResult = await requestApproval(action, decision);
           } catch (error) {
             const allow = policy.mode !== "strict" && policy.runtime?.onApprovalProviderError === "allow";
             const failureDecision = providerFailureDecision(decision, request, allow);
             await emitSafely(options.eventSink, decisionEvent(action, failureDecision));
-            if (allow) return definition.execute(arguments_, context);
-            if (error instanceof DvarApprovalProviderError) throw error;
-            throw new DvarApprovalProviderError(request, error);
+            if (!allow) {
+              if (error instanceof DvarApprovalProviderError) throw error;
+              throw new DvarApprovalProviderError(request, error);
+            }
+            decision = await commitRuntimeInternal(action, failureDecision);
+            if (decision.effect === "deny") throw new DvarDeniedError(decision);
           }
-          if (providerResult.status === "approved" && providerResult.grant !== undefined) {
+          if (providerResult?.status === "approved" && providerResult.grant !== undefined) {
             decision = await evaluateInternal(action, {
               approvalGrant: providerResult.grant,
               commitRuntime: true
@@ -423,9 +435,9 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
             if (requiresApproval(decision)) {
               throw new DvarApprovalRequiredError(decision);
             }
-          } else if (providerResult.status === "rejected") {
+          } else if (providerResult?.status === "rejected") {
             throw new DvarApprovalRejectedError(decision, request, providerResult);
-          } else {
+          } else if (providerResult !== undefined) {
             throw new DvarApprovalRequiredError(decision);
           }
         } else {
@@ -469,6 +481,7 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
       evaluateInternal(action, evaluateOptions),
     authorize: (action: DvarAction, evaluateOptions: DvarEvaluationOptions = {}) =>
       evaluateInternal(action, { ...evaluateOptions, commitRuntime: true }),
+    commitRuntime: commitRuntimeInternal,
     recordOutcome: recordOutcomeInternal,
     diagnostics: () => runtimeGuard.diagnostics(),
     createApprovalRequest: createRequest,
