@@ -2,6 +2,32 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
+## 0.4.0-alpha.0
+
+### Added
+
+- Side-effect-free `evaluate()` and execution-time `authorize()` APIs.
+- Runtime `commitRuntime`, `recordOutcome`, and `diagnostics` APIs.
+- Task and session tool-call ceilings.
+- Scoped call, cost, and monetary quotas with configurable windows.
+- Depth, retry, and consecutive-tool limits.
+- Repeated-action and alternating-action loop detection.
+- Circuit breakers with closed, open, and half-open states.
+- In-memory runtime store and Redis/Valkey-compatible adapters.
+- Runtime-safety enforcement for protected tools and MCP `tools/call` requests.
+- Runtime usage binding in approval requests and grants.
+- Bounded runtime-control metadata in decision audit events.
+- `@rokadhq/dvar/runtime-safety` package export.
+
+### Security
+
+- `evaluate()` does not consume quotas, preventing policy tests and previews from mutating enforcement state.
+- Strict mode fails closed when the runtime state store is unavailable.
+- Fail-open store behavior requires explicit policy outside strict mode.
+- Multi-instance stateful enforcement rejects process-local stores.
+- Approval grants are invalidated when reviewed cost or monetary usage changes.
+- MCP accounting headers are consumed locally and are not forwarded upstream.
+
 ## 0.3.0-alpha.0
 
 ### Added
@@ -39,15 +65,6 @@ All notable changes to Dvar are documented here. Dvar follows prerelease semanti
 - MCP Streamable HTTP policy proxy for pre-execution `tools/call` enforcement.
 - CLI commands: `scan`, `inspect`, `lock`, `diff`, and `proxy`.
 - `@rokadhq/dvar/mcp` package export.
-- MCP security and inventory-reference documentation.
-- Integrity-aware policy testing with an explicit lockfile.
-
-### Security
-
-- Caller authorization is not forwarded by the MCP proxy unless explicitly enabled.
-- Plain HTTP is accepted automatically only for loopback endpoints.
-- Scanning never mutates the reviewed lockfile.
-- Tool metadata and server capability claims remain untrusted inputs.
 
 ## 0.1.0-alpha.0
 
