@@ -6,7 +6,7 @@ import {
 } from "../src/index.js";
 import type { DvarAction, DvarPolicy } from "../src/types.js";
 
-function policy(runtime: DvarPolicy["runtime"]): DvarPolicy {
+function policy(runtime: NonNullable<DvarPolicy["runtime"]>): DvarPolicy {
   return {
     schemaVersion: "1",
     version: "0.4-test",
