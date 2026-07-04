@@ -98,12 +98,16 @@ function applyJsonRedactions<T>(value: T, policy: DvarOutputGuardPolicy, redacti
     }
     if (rule.path !== undefined) {
       const target = rule.path.split(".").filter(Boolean);
-      visit(next, [], (container, key, currentPath) => {
-        if (pathString(currentPath) === pathString(target) && key === target.at(-1)) {
-          container[key] = replacement;
-          addRedaction(redactions, { ruleId: rule.id, source: "path", count: 1, path: rule.path });
-        }
-      });
+      const targetPath = pathString(target);
+      const targetKey = target.at(-1);
+      if (targetKey !== undefined) {
+        visit(next, [], (container, key, currentPath) => {
+          if (pathString(currentPath) === targetPath && key === targetKey) {
+            container[key] = replacement;
+            addRedaction(redactions, { ruleId: rule.id, source: "path", count: 1, path: rule.path! });
+          }
+        });
+      }
     }
     if (rule.pattern !== undefined) {
       const regex = new RegExp(rule.pattern, "gu");
