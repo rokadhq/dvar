@@ -209,9 +209,9 @@ async function filterMcpResponse(
     }
   }
   const filtered = outputGuard.filter({
-    action,
+    ...(action !== undefined ? { action } : {}),
     value,
-    mediaType: type,
+    ...(type !== undefined ? { mediaType: type } : {}),
     source: "mcp"
   });
   if (filtered.summary.status === "denied") {
