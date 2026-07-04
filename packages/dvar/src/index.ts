@@ -26,6 +26,7 @@ export * from "./mcp/index.js";
 export * from "./approvals/index.js";
 export * from "./runtime-safety/index.js";
 export * from "./stdio/index.js";
+export * from "./output-guard/index.js";
 export {
   applyOpenAIAgentsApproval,
   createOpenAIAgentsNeedsApproval,
