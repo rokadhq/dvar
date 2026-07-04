@@ -4,7 +4,7 @@ import {
   createDvar,
   createHmacApprovalSigner
 } from "../src/index.js";
-import type { DvarAction, DvarPolicy } from "../src/index.js";
+import type { DvarAction, DvarPolicy, DvarToolContext } from "../src/index.js";
 
 const secret = "0123456789abcdef0123456789abcdef";
 
@@ -39,6 +39,17 @@ function action(overrides: Partial<DvarAction> = {}): DvarAction {
     tool: { name: "payments.refund" },
     arguments: { paymentId: "pay-1", amount: 5000 },
     ...overrides
+  };
+}
+
+function toolContextFrom(source: DvarAction): DvarToolContext {
+  return {
+    principal: source.principal,
+    agent: source.agent,
+    environment: source.environment,
+    ...(source.session !== undefined ? { session: source.session } : {}),
+    ...(source.task !== undefined ? { task: source.task } : {}),
+    ...(source.tenant !== undefined ? { tenant: source.tenant } : {})
   };
 }
 
@@ -147,13 +158,8 @@ describe("approval grants", () => {
         return { ok: true };
       }
     });
-    await expect(tool(action().arguments, {
-      principal: action().principal,
-      agent: action().agent,
-      environment: action().environment,
-      session: action().session,
-      task: action().task
-    })).resolves.toEqual({ ok: true });
+    const source = action();
+    await expect(tool(source.arguments, toolContextFrom(source))).resolves.toEqual({ ok: true });
     expect(calls).toBe(1);
   });
 
