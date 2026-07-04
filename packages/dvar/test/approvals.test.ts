@@ -8,7 +8,16 @@ import type { DvarAction, DvarPolicy, DvarToolContext } from "../src/index.js";
 
 const secret = "0123456789abcdef0123456789abcdef";
 
-function policy(scope: "once" | "session" | "task" = "once", maxUses = 1): DvarPolicy {
+type ApprovalScope = "once" | "session" | "task";
+
+function approvalBind(scope: ApprovalScope): string[] | undefined {
+  if (scope === "session") return ["principal.id", "environment", "tool.name", "session.id"];
+  if (scope === "task") return ["principal.id", "environment", "tool.name", "task.id"];
+  return undefined;
+}
+
+function policy(scope: ApprovalScope = "once", maxUses = 1): DvarPolicy {
+  const bind = approvalBind(scope);
   return {
     schemaVersion: "1",
     mode: "enforce",
@@ -21,7 +30,7 @@ function policy(scope: "once" | "session" | "task" = "once", maxUses = 1): DvarP
         provider: "manual",
         scope,
         maxUses,
-        ...(scope !== "once" ? { bind: ["principal.id", "environment", "tool.name"] } : {})
+        ...(bind !== undefined ? { bind } : {})
       }
     }]
   };
