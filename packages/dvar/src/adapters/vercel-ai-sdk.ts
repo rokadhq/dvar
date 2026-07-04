@@ -25,11 +25,12 @@ export interface VercelAISDKToolLike<TInput = unknown, TResult = unknown, TExecu
 }
 
 export type VercelAISDKToolsLike = Record<string, VercelAISDKToolLike>;
+type AnyVercelAISDKToolLike = VercelAISDKToolLike<any, any, any>;
 
 export interface VercelAISDKContextInput<
   TInput = unknown,
-  TTool extends VercelAISDKToolLike<TInput, unknown, TExecutionOptions> = VercelAISDKToolLike<TInput, unknown, TExecutionOptions>,
-  TExecutionOptions = unknown
+  TExecutionOptions = unknown,
+  TTool extends VercelAISDKToolLike<TInput, unknown, TExecutionOptions> = VercelAISDKToolLike<TInput, unknown, TExecutionOptions>
 > {
   toolName: string;
   tool: TTool;
@@ -39,25 +40,25 @@ export interface VercelAISDKContextInput<
 
 export type VercelAISDKContextResolver<
   TInput = unknown,
-  TTool extends VercelAISDKToolLike<TInput, unknown, TExecutionOptions> = VercelAISDKToolLike<TInput, unknown, TExecutionOptions>,
-  TExecutionOptions = unknown
+  TExecutionOptions = unknown,
+  TTool extends VercelAISDKToolLike<TInput, unknown, TExecutionOptions> = VercelAISDKToolLike<TInput, unknown, TExecutionOptions>
 > = (
-  input: VercelAISDKContextInput<TInput, TTool, TExecutionOptions>
+  input: VercelAISDKContextInput<TInput, TExecutionOptions, TTool>
 ) => DvarToolContext | Promise<DvarToolContext>;
 
 export interface VercelAISDKAdapterOptions<TExecutionOptions = unknown> {
   runtime: Pick<DvarRuntime, "evaluate" | "protectTool">;
   context?: DvarToolContext;
-  contextResolver?: VercelAISDKContextResolver<unknown, VercelAISDKToolLike<unknown, unknown, TExecutionOptions>, TExecutionOptions>;
+  contextResolver?: VercelAISDKContextResolver<any, TExecutionOptions, AnyVercelAISDKToolLike>;
   namespace?: string;
   server?: DvarAction["server"];
-  capabilities?: string[] | ((toolName: string, tool: VercelAISDKToolLike) => string[]);
-  toDvarInputSchema?: (toolName: string, tool: VercelAISDKToolLike) => Record<string, unknown> | undefined;
+  capabilities?: string[] | ((toolName: string, tool: AnyVercelAISDKToolLike) => string[]);
+  toDvarInputSchema?: (toolName: string, tool: AnyVercelAISDKToolLike) => Record<string, unknown> | undefined;
   composeNeedsApproval?: boolean;
   onDecision?: (input: { action: DvarAction; decision: DvarDecision }) => void | Promise<void>;
 }
 
-function hasExecute(tool: VercelAISDKToolLike): tool is VercelAISDKToolLike & Required<Pick<VercelAISDKToolLike, "execute">> {
+function hasExecute(tool: AnyVercelAISDKToolLike): tool is AnyVercelAISDKToolLike & Required<Pick<AnyVercelAISDKToolLike, "execute">> {
   return typeof tool.execute === "function";
 }
 
@@ -79,8 +80,8 @@ function looksLikeJsonSchema(value: unknown): value is Record<string, unknown> {
 
 function dvarInputSchema(
   toolName: string,
-  tool: VercelAISDKToolLike,
-  options: VercelAISDKAdapterOptions
+  tool: AnyVercelAISDKToolLike,
+  options: VercelAISDKAdapterOptions<any>
 ): Record<string, unknown> | undefined {
   const configured = options.toDvarInputSchema?.(toolName, tool);
   if (configured !== undefined) return configured;
@@ -89,8 +90,8 @@ function dvarInputSchema(
 
 function capabilitiesFor(
   toolName: string,
-  tool: VercelAISDKToolLike,
-  configured: VercelAISDKAdapterOptions["capabilities"]
+  tool: AnyVercelAISDKToolLike,
+  configured: VercelAISDKAdapterOptions<any>["capabilities"]
 ): string[] {
   if (typeof configured === "function") return configured(toolName, tool);
   return configured ?? [];
@@ -98,7 +99,7 @@ function capabilitiesFor(
 
 async function resolveContext<TExecutionOptions>(
   options: VercelAISDKAdapterOptions<TExecutionOptions>,
-  input: VercelAISDKContextInput<unknown, VercelAISDKToolLike<unknown, unknown, TExecutionOptions>, TExecutionOptions>
+  input: VercelAISDKContextInput<unknown, TExecutionOptions, AnyVercelAISDKToolLike>
 ): Promise<DvarToolContext> {
   if (options.contextResolver !== undefined) return options.contextResolver(input);
   if (options.context !== undefined) return options.context;
@@ -107,10 +108,10 @@ async function resolveContext<TExecutionOptions>(
 
 function actionFrom(
   toolName: string,
-  tool: VercelAISDKToolLike,
+  tool: AnyVercelAISDKToolLike,
   input: unknown,
   context: DvarToolContext,
-  options: VercelAISDKAdapterOptions,
+  options: VercelAISDKAdapterOptions<any>,
   inputSchema: Record<string, unknown> | undefined
 ): DvarAction {
   return {
@@ -160,7 +161,7 @@ export function createVercelAISDKNeedsApproval<TInput = unknown, TExecutionOptio
   const inputSchema = dvarInputSchema(toolName, tool, options);
   return async (input, executionOptions) => {
     if (await originalNeedsApproval(tool.needsApproval, input, executionOptions)) return true;
-    const context = await resolveContext(options, { toolName, tool: tool as VercelAISDKToolLike<unknown, unknown, TExecutionOptions>, input, ...(executionOptions !== undefined ? { executionOptions } : {}) });
+    const context = await resolveContext(options, { toolName, tool, input, ...(executionOptions !== undefined ? { executionOptions } : {}) });
     const action = actionFrom(toolName, tool, input, context, options, inputSchema);
     const decision = await options.runtime.evaluate(action);
     await options.onDecision?.({ action, decision });
@@ -175,7 +176,7 @@ function protectedExecute<TInput, TResult, TExecutionOptions>(
 ): (input: TInput, executionOptions?: TExecutionOptions) => Promise<TResult> {
   const inputSchema = dvarInputSchema(toolName, tool, options);
   return async (input, executionOptions) => {
-    const context = await resolveContext(options, { toolName, tool: tool as VercelAISDKToolLike<unknown, unknown, TExecutionOptions>, input, ...(executionOptions !== undefined ? { executionOptions } : {}) });
+    const context = await resolveContext(options, { toolName, tool, input, ...(executionOptions !== undefined ? { executionOptions } : {}) });
     const definition: DvarToolDefinition<TInput, TResult> = {
       name: toolName,
       ...(options.namespace !== undefined ? { namespace: options.namespace } : {}),
@@ -211,19 +212,19 @@ export function protectVercelAISDKTool<TInput = unknown, TResult = unknown, TExe
       : {})
   };
   if (hasExecute(tool)) {
-    next.execute = protectedExecute(toolName, tool, options);
+    next.execute = protectedExecute(toolName, tool, options) as (input: TInput, options?: TExecutionOptions) => TResult | Promise<TResult>;
   }
   return next;
 }
 
 export function protectVercelAISDKTools<
-  TTools extends Record<string, VercelAISDKToolLike<unknown, unknown, TExecutionOptions>>,
+  TTools extends Record<string, AnyVercelAISDKToolLike>,
   TExecutionOptions = unknown
 >(
   tools: TTools,
   options: VercelAISDKAdapterOptions<TExecutionOptions>
 ): TTools {
-  const protectedTools: Record<string, VercelAISDKToolLike> = {};
+  const protectedTools: Record<string, AnyVercelAISDKToolLike> = {};
   for (const [toolName, tool] of Object.entries(tools)) {
     protectedTools[toolName] = protectVercelAISDKTool(toolName, tool, options);
   }
