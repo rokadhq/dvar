@@ -1,6 +1,6 @@
 {
   "name": "@rokadhq/dvar",
-  "version": "0.4.0-alpha.0",
+  "version": "0.5.0-alpha.0",
   "description": "Policy firewall for AI agents, tool calls, and MCP connections.",
   "keywords": [
     "ai-agent",
@@ -62,6 +62,11 @@
       "types": "./dist/runtime-safety.d.ts",
       "import": "./dist/runtime-safety.js",
       "require": "./dist/runtime-safety.cjs"
+    },
+    "./stdio": {
+      "types": "./dist/stdio.d.ts",
+      "import": "./dist/stdio.js",
+      "require": "./dist/stdio.cjs"
     },
     "./adapters/openai-agents": {
       "types": "./dist/openai-agents.d.ts",

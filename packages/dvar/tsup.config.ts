@@ -7,6 +7,7 @@ export default defineConfig([
       mcp: "src/mcp/index.ts",
       approvals: "src/approvals/index.ts",
       "runtime-safety": "src/runtime-safety/index.ts",
+      stdio: "src/stdio/index.ts",
       "openai-agents": "src/adapters/openai-agents.ts"
     },
     format: ["esm", "cjs"],
