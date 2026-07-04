@@ -100,7 +100,7 @@ export function createStdioSupervisor(
 
       const child = spawn(request.command, request.args ?? [], {
         cwd: request.cwd,
-        env: { ...process.env, ...(request.env ?? {}) },
+        env: request.env ?? {},
         shell: false,
         stdio: ["pipe", "pipe", "pipe"]
       });
@@ -110,7 +110,7 @@ export function createStdioSupervisor(
         child.kill("SIGTERM");
       }, limits.timeoutMs);
 
-      child.stdout.on("data", (chunk: Buffer) => {
+      child.stdout!.on("data", (chunk: Buffer) => {
         const result = appendBounded(stdout, chunk, stdoutBytes, limits.maxOutputBytes);
         stdoutBytes = result.bytes;
         if (result.exceeded && status === "completed") {
@@ -118,7 +118,7 @@ export function createStdioSupervisor(
           child.kill("SIGTERM");
         }
       });
-      child.stderr.on("data", (chunk: Buffer) => {
+      child.stderr!.on("data", (chunk: Buffer) => {
         const result = appendBounded(stderr, chunk, stderrBytes, limits.maxOutputBytes);
         stderrBytes = result.bytes;
         if (result.exceeded && status === "completed") {
@@ -127,8 +127,8 @@ export function createStdioSupervisor(
         }
       });
 
-      if (request.stdin !== undefined) child.stdin.end(request.stdin);
-      else child.stdin.end();
+      if (request.stdin !== undefined) child.stdin!.end(request.stdin);
+      else child.stdin!.end();
 
       const completion = await new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
         child.once("error", reject);
