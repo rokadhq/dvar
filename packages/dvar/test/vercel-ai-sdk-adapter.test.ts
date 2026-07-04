@@ -7,7 +7,8 @@ import {
   runAdapterConformanceSuite,
   type DvarPolicy,
   type DvarToolContext,
-  type VercelAISDKToolLike
+  type VercelAISDKToolLike,
+  type VercelAISDKNeedsApproval
 } from "../src/index.js";
 
 const context: DvarToolContext = {
@@ -39,6 +40,13 @@ function policy(defaultEffect: "allow" | "deny" = "allow"): DvarPolicy {
   };
 }
 
+function approvalFunction<TInput>(
+  value: VercelAISDKNeedsApproval<TInput, unknown> | undefined
+): (input: TInput) => Promise<boolean> {
+  if (typeof value !== "function") throw new Error("Expected needsApproval function");
+  return (input) => Promise.resolve(value(input));
+}
+
 describe("Vercel AI SDK adapter", () => {
   it("wraps an AI SDK-style tool execute function through Dvar", async () => {
     const runtime = await createDvar({ policy: policy() });
@@ -58,13 +66,15 @@ describe("Vercel AI SDK adapter", () => {
       context,
       capabilities: ["read"]
     });
+    const weather = tools.weather;
+    if (weather === undefined) throw new Error("weather tool missing");
 
-    await expect(tools.weather.execute?.({ location: "Bhubaneswar" })).resolves.toEqual({
+    await expect(weather.execute?.({ location: "Bhubaneswar" })).resolves.toEqual({
       location: "Bhubaneswar",
       temperature: 27
     });
-    expect(tools.weather.strict).toBe(true);
-    expect(tools.weather.description).toBe("Get weather");
+    expect(weather.strict).toBe(true);
+    expect(weather.description).toBe("Get weather");
   });
 
   it("denies protected AI SDK-style tools when Dvar denies the action", async () => {
@@ -93,7 +103,7 @@ describe("Vercel AI SDK adapter", () => {
       onDecision: ({ decision }) => { decisions.push(decision.effect); }
     });
 
-    await expect(tool.needsApproval?.({ amount: 100 })).resolves.toBe(true);
+    await expect(approvalFunction<{ amount: number }>(tool.needsApproval)({ amount: 100 })).resolves.toBe(true);
     expect(decisions).toEqual(["require_approval"]);
   });
 
@@ -107,7 +117,7 @@ describe("Vercel AI SDK adapter", () => {
       context
     });
 
-    await expect(tool.needsApproval?.({})).resolves.toBe(true);
+    await expect(approvalFunction<Record<string, never>>(tool.needsApproval)({})).resolves.toBe(true);
   });
 
   it("uses adapter conformance cases for framework wrappers", async () => {
