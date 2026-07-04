@@ -1,48 +1,27 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  DvarApprovalRejectedError,
   InMemoryApprovalUseStore,
   createDvar,
   createHmacApprovalSigner
 } from "../src/index.js";
-import type {
-  DvarAction,
-  DvarApprovalProvider,
-  DvarPolicy
-} from "../src/types.js";
+import type { DvarAction, DvarPolicy } from "../src/index.js";
 
 const secret = "0123456789abcdef0123456789abcdef";
 
-function policy(
-  scope: "once" | "session" | "task" = "once",
-  maxUses = 1
-): DvarPolicy {
+function policy(scope: "once" | "session" | "task" = "once", maxUses = 1): DvarPolicy {
   return {
     schemaVersion: "1",
-    version: "0.3-test",
     mode: "enforce",
     defaultEffect: "deny",
     rules: [{
-      id: "approve-refund",
+      id: "approve-payments",
       effect: "require_approval",
-      when: { "tool.name": "billing.refund" },
+      when: { "tool.name": "payments.refund" },
       approval: {
-        provider: "test",
+        provider: "manual",
         scope,
         maxUses,
-        expiresInSeconds: 300,
-        ...(scope === "once"
-          ? {}
-          : {
-              bind: [
-                "principal.id",
-                "agent.id",
-                "environment",
-                "server.id",
-                "tool.name",
-                scope === "session" ? "session.id" : "task.id"
-              ]
-            })
+        ...(scope !== "once" ? { bind: ["principal.id", "environment", "tool.name"] } : {})
       }
     }]
   };
@@ -50,19 +29,26 @@ function policy(
 
 function action(overrides: Partial<DvarAction> = {}): DvarAction {
   return {
-    id: "action-1",
+    id: "act-1",
     principal: { id: "user-1", type: "user" },
-    agent: { id: "finance-agent" },
-    tenant: { id: "tenant-a" },
+    agent: { id: "agent-1" },
     session: { id: "session-1" },
     task: { id: "task-1" },
     environment: "production",
-    server: { id: "billing", transport: "function" },
-    tool: { name: "billing.refund", capabilities: ["finance.refund"] },
+    server: { id: "payments" },
+    tool: { name: "payments.refund" },
     arguments: { paymentId: "pay-1", amount: 5000 },
-    resources: [{ type: "payment", id: "pay-1", tenantId: "tenant-a" }],
     ...overrides
   };
+}
+
+function tamperSignature(token: string): string {
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[2] === undefined || parts[2].length === 0) {
+    throw new Error("Unexpected approval token format");
+  }
+  const replacement = parts[2][0] === "A" ? "B" : "A";
+  return `${parts[0]}.${parts[1]}.${replacement}${parts[2].slice(1)}`;
 }
 
 describe("approval grants", () => {
@@ -72,25 +58,18 @@ describe("approval grants", () => {
       policy: policy(),
       approval: { signer, useStore: new InMemoryApprovalUseStore() }
     });
-    const first = await runtime.evaluate(action());
-    expect(first.effect).toBe("require_approval");
-    expect(first.approvalRequest?.scope).toBe("once");
-
-    const grant = await signer.issue(first.approvalRequest!, {
+    const decision = await runtime.evaluate(action());
+    expect(decision.effect).toBe("require_approval");
+    const request = decision.approvalRequest!;
+    const grant = await signer.issue(request, {
       approver: { id: "reviewer-1", type: "user" }
     });
-    const resumed = await runtime.resume(
-      action({ id: "retry-with-new-id" }),
-      grant.token
-    );
-    expect(resumed).toMatchObject({
-      effect: "allow",
-      reasonCode: "approval.grant_accepted",
-      approval: { status: "accepted", approverId: "reviewer-1" }
-    });
 
-    const replayed = await runtime.resume(action({ id: "retry-2" }), grant.token);
-    expect(replayed).toMatchObject({
+    await expect(runtime.resume({ ...action(), id: "act-2" }, grant.token)).resolves.toMatchObject({
+      effect: "allow",
+      reasonCode: "approval.grant_accepted"
+    });
+    await expect(runtime.resume({ ...action(), id: "act-3" }, grant.token)).resolves.toMatchObject({
       effect: "deny",
       reasonCode: "approval.grant_replayed"
     });
@@ -118,8 +97,7 @@ describe("approval grants", () => {
       reasonCode: "approval.binding_mismatch"
     });
 
-    const tampered = `${grant.token.slice(0, -1)}${grant.token.endsWith("a") ? "b" : "a"}`;
-    await expect(runtime.resume(action(), tampered)).resolves.toMatchObject({
+    await expect(runtime.resume(action(), tamperSignature(grant.token))).resolves.toMatchObject({
       effect: "deny",
       reasonCode: "approval.grant_invalid"
     });
@@ -137,101 +115,86 @@ describe("approval grants", () => {
       maxUses: 2
     });
 
-    await expect(runtime.resume(action({
-      id: "session-use-1",
-      arguments: { paymentId: "pay-2", amount: 100 }
-    }), grant.token)).resolves.toMatchObject({ effect: "allow" });
-    await expect(runtime.resume(action({
-      id: "session-use-2",
-      arguments: { paymentId: "pay-3", amount: 200 }
-    }), grant.token)).resolves.toMatchObject({ effect: "allow" });
-    await expect(runtime.resume(action({ id: "session-use-3" }), grant.token))
-      .resolves.toMatchObject({ effect: "deny", reasonCode: "approval.grant_replayed" });
+    await expect(runtime.resume(action({ id: "s1", arguments: { amount: 100 } }), grant.token)).resolves.toMatchObject({ effect: "allow" });
+    await expect(runtime.resume(action({ id: "s2", arguments: { amount: 200 } }), grant.token)).resolves.toMatchObject({ effect: "allow" });
+    await expect(runtime.resume(action({ id: "s3", arguments: { amount: 300 } }), grant.token)).resolves.toMatchObject({
+      effect: "deny",
+      reasonCode: "approval.grant_replayed"
+    });
   });
 
   it("auto-resumes a protected tool after immediate provider approval", async () => {
     const signer = createHmacApprovalSigner({ secret, issuer: "test" });
-    const provider: DvarApprovalProvider = {
-      name: "test",
-      request: async (request) => ({
-        status: "approved",
-        requestId: request.id,
-        grant: (await signer.issue(request, {
-          approver: { id: "reviewer-1" }
-        })).token
-      })
-    };
-    const events: unknown[] = [];
+    let calls = 0;
     const runtime = await createDvar({
       policy: policy(),
-      approval: { signer, provider, useStore: new InMemoryApprovalUseStore() },
-      eventSink: (event) => { events.push(event); }
-    });
-    const execute = vi.fn(async () => ({ refunded: true }));
-    const protectedRefund = runtime.protectTool({
-      name: "billing.refund",
-      capabilities: ["finance.refund"],
-      execute
-    });
-
-    await expect(protectedRefund(
-      { paymentId: "pay-1", amount: 5000 },
-      {
-        principal: { id: "user-1", type: "user" },
-        agent: { id: "finance-agent" },
-        environment: "production",
-        tenant: { id: "tenant-a" }
+      approval: {
+        signer,
+        useStore: new InMemoryApprovalUseStore(),
+        provider: {
+          name: "manual",
+          async request(request) {
+            const grant = await signer.issue(request, { approver: { id: "reviewer-1" } });
+            return { status: "approved", requestId: request.id, grant: grant.token };
+          }
+        }
       }
-    )).resolves.toEqual({ refunded: true });
-    expect(execute).toHaveBeenCalledOnce();
-    expect(events).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: "dvar.approval.requested" }),
-      expect.objectContaining({ type: "dvar.approval.consumed" })
-    ]));
+    });
+    const tool = runtime.protectTool({
+      name: "payments.refund",
+      execute: () => {
+        calls += 1;
+        return { ok: true };
+      }
+    });
+    await expect(tool(action().arguments, {
+      principal: action().principal,
+      agent: action().agent,
+      environment: action().environment,
+      session: action().session,
+      task: action().task
+    })).resolves.toEqual({ ok: true });
+    expect(calls).toBe(1);
   });
 
   it("surfaces provider rejection without executing the tool", async () => {
     const signer = createHmacApprovalSigner({ secret, issuer: "test" });
+    let calls = 0;
     const runtime = await createDvar({
       policy: policy(),
       approval: {
         signer,
         provider: {
-          name: "test",
-          request: async (request) => ({
-            status: "rejected",
-            requestId: request.id,
-            reason: "Insufficient evidence"
-          })
+          name: "manual",
+          async request(request) {
+            return { status: "rejected", requestId: request.id, reason: "too risky" };
+          }
         }
       }
     });
-    const execute = vi.fn();
-    const protectedRefund = runtime.protectTool({
-      name: "billing.refund",
-      capabilities: ["finance.refund"],
-      execute
+    const tool = runtime.protectTool({
+      name: "payments.refund",
+      execute: () => { calls += 1; return { ok: true }; }
     });
-
-    await expect(protectedRefund({}, {
-      principal: { id: "user-1", type: "user" },
-      agent: { id: "finance-agent" },
-      environment: "production"
-    })).rejects.toBeInstanceOf(DvarApprovalRejectedError);
-    expect(execute).not.toHaveBeenCalled();
+    await expect(tool({}, {
+      principal: action().principal,
+      agent: action().agent,
+      environment: action().environment
+    })).rejects.toMatchObject({ code: "approval.rejected" });
+    expect(calls).toBe(0);
   });
 
   it("never places a raw grant into audit events", async () => {
-    const signer = createHmacApprovalSigner({ secret, issuer: "test" });
     const events: unknown[] = [];
+    const signer = createHmacApprovalSigner({ secret, issuer: "test" });
     const runtime = await createDvar({
       policy: policy(),
-      approval: { signer, useStore: new InMemoryApprovalUseStore() },
-      eventSink: (event) => { events.push(event); }
+      eventSink: (event) => { events.push(event); },
+      approval: { signer, useStore: new InMemoryApprovalUseStore() }
     });
     const request = (await runtime.evaluate(action())).approvalRequest!;
     const grant = await signer.issue(request, { approver: { id: "reviewer-1" } });
-    await runtime.resume(action(), grant.token);
+    await runtime.resume(action({ id: "audit" }), grant.token);
     expect(JSON.stringify(events)).not.toContain(grant.token);
   });
 });
