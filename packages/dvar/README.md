@@ -1,8 +1,8 @@
 # `@rokadhq/dvar`
 
-Dvar is the policy firewall for AI agents. It enforces policy, approvals, integrity, runtime safety, local-tool hardening, and output protection around side effects.
+Dvar is the policy firewall for AI agents. It enforces policy, approvals, integrity, runtime safety, local-tool hardening, output protection, and framework-adapter controls around side effects.
 
-> **Status:** `0.6.0-alpha.0`. Public contracts remain pre-stable.
+> **Status:** `0.7.0-alpha.0`. Public contracts remain pre-stable.
 
 ## Install
 
@@ -10,30 +10,20 @@ Dvar is the policy firewall for AI agents. It enforces policy, approvals, integr
 npm install @rokadhq/dvar
 ```
 
-## Version 0.6
+## Version 0.7
 
-Dvar 0.6 adds `@rokadhq/dvar/output-guard` and integrated output filtering for protected tools and MCP responses:
-
-- maximum output size;
-- JSON/text/binary content classification;
-- binary denial by default;
-- field, path, pattern, and built-in secret redaction;
-- configured deny-pattern blocking;
-- bounded audit metadata.
+Dvar 0.7 adds `@rokadhq/dvar/adapters/vercel-ai-sdk` and `@rokadhq/dvar/adapters/conformance`.
 
 ```ts
-const dvar = await createDvar({
-  policyPath: "dvar.yaml",
-  outputGuard: {
-    policy: {
-      maxBytes: 64_000,
-      redact: [{ id: "token", pattern: "token=[A-Za-z0-9._~+/=-]+" }],
-      deny: [{ id: "prompt-injection", pattern: "ignore previous instructions" }]
-    }
-  }
+import { protectVercelAISDKTools } from "@rokadhq/dvar/adapters/vercel-ai-sdk";
+
+const protectedTools = protectVercelAISDKTools(tools, {
+  runtime: dvar,
+  context,
+  toDvarInputSchema: (toolName) => jsonSchemas[toolName]
 });
 ```
 
-Output filtering is not summarization. Raw sensitive output is filtered before any model-based transformation.
+The Vercel AI SDK adapter is structural and dependency-free. It wraps AI SDK-style tools, composes `needsApproval`, and routes `execute` through Dvar protected tools.
 
-See `docs/output-guard.md`, `docs/stdio-hardening.md`, `docs/runtime-safety.md`, `docs/approvals.md`, `docs/mcp-security.md`, and `docs/threat-model.md` for detailed contracts and residual risks.
+Use `docs/framework-adapters.md` for details and security boundaries.
