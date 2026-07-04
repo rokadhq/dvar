@@ -2,6 +2,31 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
+## 0.5.0-alpha.0
+
+### Added
+
+- `@rokadhq/dvar/stdio` package export.
+- Local process supervisor for stdio and subprocess tools.
+- Executable realpath and SHA-256 identity inspection.
+- Local package metadata discovery from `package.json`.
+- Executable allowlisting by command, realpath, hash, package name, or package version.
+- Command absolute-path enforcement.
+- Argument count, allow-pattern, deny-pattern, NUL, and path-root checks.
+- Environment allowlist and denylist checks.
+- Cwd and path-argument root restrictions.
+- Process timeouts and stdout/stderr output caps.
+- Optional Dvar runtime authorization before spawning.
+- Runtime outcome recording after supervised execution.
+
+### Security
+
+- Supervised processes run with `shell: false`.
+- Parent-process environment variables are not inherited by default.
+- Normalized stdio actions record environment keys, not environment values.
+- Local process execution is denied before spawn when Dvar runtime policy denies the action.
+- Stdio hardening is documented as a boundary, not as a sandbox replacement.
+
 ## 0.4.0-alpha.0
 
 ### Added

@@ -1,12 +1,12 @@
 # Dvar Threat Model
 
-Dvar assumes model output, user content, tool metadata, MCP servers, approval services, runtime state, accounting context, and external destinations can be incorrect or compromised.
+Dvar treats model output, tool metadata, MCP servers, approval services, runtime state, accounting context, local executables, local package metadata, subprocess output, and external destinations as potentially incorrect or compromised.
 
-Dvar reduces risk from excessive agency, unsafe tool use, confused-deputy behavior, cross-tenant actions, approval replay, runaway loops, budget exhaustion, dependency failure, and MCP definition changes by enforcing deterministic controls before execution.
+Dvar reduces risk from excessive agency, unsafe tool use, confused-deputy behavior, cross-tenant actions, approval replay, runaway loops, budget exhaustion, dependency failure, local command abuse, environment leakage, filesystem-path misuse, and MCP definition changes by enforcing deterministic controls before execution.
 
-Dvar does not replace IAM, application authorization, sandboxing, workload isolation, secrets management, or network policy. It cannot protect actions that bypass its wrapper or proxy boundary.
+Dvar does not replace IAM, application authorization, sandboxing, workload isolation, secrets management, filesystem permissions, or network policy. It cannot protect actions that bypass its wrapper, stdio supervisor, or proxy boundary.
 
-## v0.1–v0.3 controls
+## v0.1–v0.4 controls
 
 - deterministic policy precedence and explicit defaults;
 - identity-aware normalized actions;
@@ -14,34 +14,33 @@ Dvar does not replace IAM, application authorization, sandboxing, workload isola
 - policy tests, monitor mode, and non-executing replay;
 - MCP inventory, lockfiles, and pre-execution proxying;
 - signed, expiring, action-bound approval grants;
-- bounded approval scopes and replay resistance.
+- runtime quotas, loop detection, circuit breakers, and shared state.
 
-## v0.4 controls
+## v0.5 controls
 
-- execution-time task and session quotas;
-- scoped call, cost, and monetary budgets;
-- depth, retry, and consecutive-tool ceilings;
-- repeated and alternating action-loop detection;
-- circuit breakers with bounded recovery probes;
-- atomic process-local and Redis/Valkey-compatible state stores;
-- explicit shared-store requirements for multi-instance enforcement;
-- strict-mode fail-closed runtime-store behavior;
-- runtime usage included in approval bindings;
-- runtime accounting headers removed before MCP forwarding;
-- bounded runtime metadata in audit events.
+- local process execution with `shell: false`;
+- executable realpath and hash identity;
+- package metadata signals;
+- executable allowlisting;
+- environment allowlist and denylist enforcement;
+- cwd and path-argument root checks;
+- command-argument pattern checks;
+- process timeouts and output caps;
+- Dvar runtime authorization before local execution;
+- outcome recording after supervised execution.
 
 ## Residual risks
 
-- capability inference and loop detection are heuristic;
-- a lockfile proves inventory continuity, not benign implementation behavior;
+- capability inference and path-argument detection are heuristic;
+- hash identity does not cover dynamic libraries, interpreters, plugins, or runtime-loaded code;
+- package metadata can be forged without external supply-chain controls;
+- local processes can still access everything permitted by the OS;
 - quota correctness depends on every execution path using Dvar and the same state namespace;
 - accounting values are only as trustworthy as the system supplying them;
 - conservative reservations may consume quota for actions later denied by another control;
-- MCP circuit outcomes currently use HTTP-level success or failure;
-- process-local state is insufficient for horizontally scaled enforcement;
-- header-based identity and usage context require an authenticated front door;
-- output filtering and stdio process containment are not yet implemented.
+- output content is not semantically filtered in v0.5;
+- header-based identity and usage context require an authenticated front door.
 
 ## Later controls
 
-Grouped multi-control reservations, distributed leases, stdio supervision, output filtering, and OpenTelemetry exporters remain staged roadmap items.
+Output filtering, grouped multi-control reservations, distributed leases, deeper stdio sandbox integrations, and OpenTelemetry exporters remain staged roadmap items.
