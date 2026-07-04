@@ -2,6 +2,29 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
+## 0.6.0-alpha.0
+
+### Added
+
+- `@rokadhq/dvar/output-guard` package export.
+- JSON, text, binary, and unknown output classification.
+- Maximum output byte enforcement.
+- Binary output denial by default.
+- Allowed content-type enforcement.
+- Configured field, dotted-path, and regex redaction.
+- Built-in secret redaction for common token shapes.
+- Configured deny-pattern blocking.
+- Protected-tool output filtering before return to caller/model.
+- MCP upstream JSON/text response filtering.
+- Bounded output-safety metadata in audit events.
+
+### Security
+
+- Raw denied output is not returned to protected-tool callers.
+- Built-in and configured redaction operate before any model-based transformation.
+- Output summaries expose counts and status rather than raw sensitive output.
+- Binary and oversized output can be blocked before entering model context.
+
 ## 0.5.0-alpha.0
 
 ### Added
