@@ -8,6 +8,11 @@ import type {
   DvarStdioRunRequest
 } from "./types.js";
 
+export interface DvarStdioPolicyResult {
+  executablePolicy: DvarStdioExecutablePolicy | undefined;
+  failure?: DvarStdioPolicyFailure;
+}
+
 function normalize(path: string): string {
   return resolve(path);
 }
@@ -36,6 +41,13 @@ function fail(reasonCode: string, message: string, executable?: DvarExecutableId
     message,
     ...(executable !== undefined ? { executable } : {})
   };
+}
+
+function result(
+  executablePolicy: DvarStdioExecutablePolicy | undefined,
+  failure?: DvarStdioPolicyFailure
+): DvarStdioPolicyResult {
+  return failure === undefined ? { executablePolicy } : { executablePolicy, failure };
 }
 
 function selectExecutablePolicy(
@@ -110,46 +122,46 @@ export function evaluateStdioPolicy(
   policy: DvarStdioPolicy | undefined,
   request: DvarStdioRunRequest,
   executable: DvarExecutableIdentity
-): { executablePolicy?: DvarStdioExecutablePolicy; failure?: DvarStdioPolicyFailure } {
+): DvarStdioPolicyResult {
   const effective = policy ?? {};
   if ((effective.allowShell as boolean | undefined) === true) {
-    return { failure: fail("stdio.shell_not_supported", "Dvar stdio supervisor does not execute through a shell", executable) };
+    return result(undefined, fail("stdio.shell_not_supported", "Dvar stdio supervisor does not execute through a shell", executable));
   }
   if ((effective.requireAbsoluteCommand ?? true) && !isAbsolute(request.command)) {
-    return { failure: fail("stdio.command_not_absolute", `Command must be absolute: ${request.command}`, executable) };
+    return result(undefined, fail("stdio.command_not_absolute", `Command must be absolute: ${request.command}`, executable));
   }
   const executablePolicy = selectExecutablePolicy(effective, executable);
   if ((effective.executables?.length ?? 0) > 0 && executablePolicy === undefined) {
-    return { failure: fail("stdio.executable_not_allowed", `Executable is not allowed: ${executable.realpath}`, executable) };
+    return result(undefined, fail("stdio.executable_not_allowed", `Executable is not allowed: ${executable.realpath}`, executable));
   }
 
   const cwd = request.cwd ?? process.cwd();
   const cwdFailure = validateCwd(cwd, effective.filesystem, executablePolicy?.cwdRoots, executable);
-  if (cwdFailure !== undefined) return { executablePolicy, failure: cwdFailure };
+  if (cwdFailure !== undefined) return result(executablePolicy, cwdFailure);
 
   const envFailure = validateEnvironment(request, effective, executablePolicy, executable);
-  if (envFailure !== undefined) return { executablePolicy, failure: envFailure };
+  if (envFailure !== undefined) return result(executablePolicy, envFailure);
 
   const args = request.args ?? [];
   const argPolicy = executablePolicy?.args;
   if (argPolicy?.maxCount !== undefined && args.length > argPolicy.maxCount) {
-    return { executablePolicy, failure: fail("stdio.args_too_many", `Too many command arguments: ${args.length}`, executable) };
+    return result(executablePolicy, fail("stdio.args_too_many", `Too many command arguments: ${args.length}`, executable));
   }
   for (const arg of args) {
-    if (arg.includes("\0")) return { executablePolicy, failure: fail("stdio.arg_invalid", "Argument contains NUL", executable) };
+    if (arg.includes("\0")) return result(executablePolicy, fail("stdio.arg_invalid", "Argument contains NUL", executable));
     if (matchAny(argPolicy?.deny, arg)) {
-      return { executablePolicy, failure: fail("stdio.arg_denied", `Argument denied by policy: ${arg}`, executable) };
+      return result(executablePolicy, fail("stdio.arg_denied", `Argument denied by policy: ${arg}`, executable));
     }
     if ((argPolicy?.allow?.length ?? 0) > 0 && !matchAny(argPolicy?.allow, arg)) {
-      return { executablePolicy, failure: fail("stdio.arg_not_allowed", `Argument not allowed by policy: ${arg}`, executable) };
+      return result(executablePolicy, fail("stdio.arg_not_allowed", `Argument not allowed by policy: ${arg}`, executable));
     }
     if (argPolicy?.validatePathArguments !== false) {
       const pathFailure = validatePathArgument(arg, cwd, effective.filesystem, executable);
-      if (pathFailure !== undefined) return { executablePolicy, failure: pathFailure };
+      if (pathFailure !== undefined) return result(executablePolicy, pathFailure);
     }
   }
 
-  return { executablePolicy };
+  return result(executablePolicy);
 }
 
 export function stdioLimits(
