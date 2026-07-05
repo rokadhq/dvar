@@ -1,6 +1,6 @@
 {
   "name": "@rokadhq/dvar",
-  "version": "0.7.0-alpha.0",
+  "version": "0.7.0",
   "description": "Policy firewall for AI agents, tool calls, and MCP connections.",
   "keywords": [
     "ai-agent",
