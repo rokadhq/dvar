@@ -2,6 +2,20 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
+## 0.5.0-alpha.0
+
+### Added
+
+- `@rokadhq/dvar/stdio` export.
+- Local process supervisor with executable identity, env policy, argument checks, cwd/path-root checks, timeouts, and output caps.
+- Optional Dvar runtime authorization and outcome recording around local execution.
+
+### Security
+
+- Processes run with `shell: false`.
+- Parent-process environment variables are not inherited by default.
+- Environment values are not copied into normalized action arguments.
+
 ## 0.4.0-alpha.0
 
 ### Added

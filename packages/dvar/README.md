@@ -1,8 +1,8 @@
 # `@rokadhq/dvar`
 
-Dvar is the policy firewall for AI agents. It enforces policy, approvals, integrity, and runtime-safety controls before tool side effects occur.
+Dvar is the policy firewall for AI agents. It enforces policy, approvals, integrity, runtime safety, and local-tool hardening before side effects occur.
 
-> **Status:** `0.4.0-alpha.0`. Public contracts remain pre-stable.
+> **Status:** `0.5.0-alpha.0`. Public contracts remain pre-stable.
 
 ## Install
 
@@ -10,42 +10,35 @@ Dvar is the policy firewall for AI agents. It enforces policy, approvals, integr
 npm install @rokadhq/dvar
 ```
 
-## Version 0.4
+## Version 0.5
 
-Dvar 0.4 adds execution-time quotas, loop detection, circuit breakers, shared runtime stores, runtime-aware MCP enforcement, and usage-bound approvals.
+Dvar 0.5 adds `@rokadhq/dvar/stdio` for hardened local process execution:
 
-```yaml
-runtime:
-  onRuntimeStoreError: deny
-  requireDistributedStore: true
-  maxToolCallsPerTask: 40
-  maxDepth: 12
-  maxRetries: 2
+- executable realpath and SHA-256 inspection;
+- package metadata discovery;
+- executable allowlisting by path, hash, or package identity;
+- argument, cwd, path-root, and environment policy;
+- supervised `spawn` with `shell: false`;
+- timeouts and output caps;
+- optional Dvar runtime authorization and outcome recording.
 
-  quotas:
-    - id: tenant-daily-inr
-      metric: monetary
-      limit: 25000
-      currency: INR
-      windowSeconds: 86400
-      scope: [tenant]
+```ts
+import { createStdioSupervisor } from "@rokadhq/dvar/stdio";
 
-  loopDetection:
-    maxRepeatedAction: 3
-    maxOscillations: 3
-    scope: [task]
-
-  circuitBreakers:
-    - id: production-billing
-      failureThreshold: 5
-      recoverySeconds: 60
-      scope: [environment, server, tool]
+const supervisor = createStdioSupervisor({
+  policy: {
+    filesystem: { cwdRoots: ["/srv/agent/workspace"] },
+    envAllowlist: ["NODE_ENV"],
+    executables: [{
+      id: "node-tool",
+      realpath: "/usr/local/bin/node",
+      sha256: "<reviewed-sha256>",
+      args: { maxCount: 8, deny: ["--inspect"] }
+    }]
+  }
+});
 ```
 
-Use `@rokadhq/dvar/runtime-safety` for the in-memory store, Redis/Valkey-compatible adapters, store contracts, and diagnostics.
+The stdio supervisor is not a sandbox. Use OS/container isolation, filesystem permissions, secrets management, and network policy alongside Dvar.
 
-`evaluate()` is side-effect-free and does not consume quotas. Use `authorize()`, `protectTool()`, or the MCP proxy immediately before execution. Call `recordOutcome()` after manually authorized execution so circuit breakers receive the result.
-
-Process-local runtime state is valid only for one enforcement process. Multi-instance deployments require a shared atomic store.
-
-See `docs/runtime-safety.md`, `docs/approvals.md`, `docs/mcp-security.md`, and `docs/threat-model.md` for detailed contracts and residual risks.
+See `docs/stdio-hardening.md`, `docs/runtime-safety.md`, `docs/approvals.md`, `docs/mcp-security.md`, and `docs/threat-model.md` for detailed contracts and residual risks.

@@ -25,6 +25,7 @@ export { evaluateIntegrity, type DvarGuardrailResult } from "./integrity.js";
 export * from "./mcp/index.js";
 export * from "./approvals/index.js";
 export * from "./runtime-safety/index.js";
+export * from "./stdio/index.js";
 export {
   applyOpenAIAgentsApproval,
   createOpenAIAgentsNeedsApproval,
