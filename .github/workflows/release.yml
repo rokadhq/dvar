@@ -27,4 +27,4 @@ jobs:
           name: dvar-sbom
           path: sbom.cdx.json
           if-no-files-found: error
-      - run: npm publish --workspace=@rokadhq/dvar --provenance --access public
+      - run: npm publish --workspace=@rokadhq/dvar --provenance --access public --tag alpha
