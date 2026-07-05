@@ -1,6 +1,6 @@
 {
   "name": "@rokadhq/dvar",
-  "version": "0.6.0-alpha.0",
+  "version": "0.7.0-alpha.0",
   "description": "Policy firewall for AI agents, tool calls, and MCP connections.",
   "keywords": [
     "ai-agent",
@@ -72,6 +72,16 @@
       "types": "./dist/output-guard.d.ts",
       "import": "./dist/output-guard.js",
       "require": "./dist/output-guard.cjs"
+    },
+    "./adapters/vercel-ai-sdk": {
+      "types": "./dist/vercel-ai-sdk.d.ts",
+      "import": "./dist/vercel-ai-sdk.js",
+      "require": "./dist/vercel-ai-sdk.cjs"
+    },
+    "./adapters/conformance": {
+      "types": "./dist/adapter-conformance.d.ts",
+      "import": "./dist/adapter-conformance.js",
+      "require": "./dist/adapter-conformance.cjs"
     },
     "./adapters/openai-agents": {
       "types": "./dist/openai-agents.d.ts",

@@ -28,6 +28,24 @@ export * from "./runtime-safety/index.js";
 export * from "./stdio/index.js";
 export * from "./output-guard/index.js";
 export {
+  protectVercelAISDKTool,
+  protectVercelAISDKTools,
+  createVercelAISDKNeedsApproval,
+  type VercelAISDKAdapterOptions,
+  type VercelAISDKContextInput,
+  type VercelAISDKContextResolver,
+  type VercelAISDKNeedsApproval,
+  type VercelAISDKToolLike,
+  type VercelAISDKToolsLike
+} from "./adapters/vercel-ai-sdk.js";
+export {
+  runAdapterConformanceSuite,
+  type DvarAdapterConformanceCase,
+  type DvarAdapterConformanceResult,
+  type DvarAdapterConformanceStatus,
+  type DvarAdapterConformanceSummary
+} from "./adapters/conformance.js";
+export {
   applyOpenAIAgentsApproval,
   createOpenAIAgentsNeedsApproval,
   resolveOpenAIAgentsInterruptions,

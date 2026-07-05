@@ -9,6 +9,8 @@ export default defineConfig([
       "runtime-safety": "src/runtime-safety/index.ts",
       stdio: "src/stdio/index.ts",
       "output-guard": "src/output-guard/index.ts",
+      "vercel-ai-sdk": "src/adapters/vercel-ai-sdk.ts",
+      "adapter-conformance": "src/adapters/conformance.ts",
       "openai-agents": "src/adapters/openai-agents.ts"
     },
     format: ["esm", "cjs"],

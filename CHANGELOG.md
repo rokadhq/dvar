@@ -2,6 +2,27 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
+## 0.7.0-alpha.0
+
+### Added
+
+- `@rokadhq/dvar/adapters/vercel-ai-sdk` package export.
+- Dependency-free structural adapter for Vercel AI SDK-style tools.
+- Protected execution wrapper for AI SDK-style `execute` functions.
+- Composed `needsApproval` support using original framework approval rules plus side-effect-free Dvar evaluation.
+- Per-call Dvar context resolution.
+- JSON Schema passthrough for Dvar argument validation when available.
+- `toDvarInputSchema` hook for Zod or custom schema conversion.
+- `@rokadhq/dvar/adapters/conformance` package export.
+- Framework-neutral adapter conformance runner.
+- Framework adapter documentation.
+
+### Security
+
+- Framework adapter execution is routed through Dvar protected tools.
+- Native framework approval hints do not replace Dvar enforcement.
+- Calls to unwrapped original tools are explicitly documented as outside Dvar's boundary.
+
 ## 0.6.0-alpha.0
 
 ### Added
