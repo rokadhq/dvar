@@ -2,7 +2,7 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
-## 0.7.0-alpha.0
+## 0.7.0
 
 ### Added
 
@@ -108,7 +108,7 @@ All notable changes to Dvar are documented here. Dvar follows prerelease semanti
 - Pluggable approval-use store with an in-memory reference implementation.
 - Runtime `createApprovalRequest`, `requestApproval`, and `resume` APIs.
 - Automatic protected-tool provider submission and immediate-grant resume.
-- Webhook approval-provider reference implementation.
+- Webhook provider reference implementation.
 - Approval-aware MCP proxy with delayed-grant header consumption.
 - Structural OpenAI Agents interruption helpers.
 - `@rokadhq/dvar/approvals` and `@rokadhq/dvar/adapters/openai-agents` exports.
@@ -130,7 +130,7 @@ All notable changes to Dvar are documented here. Dvar follows prerelease semanti
 - MCP Streamable HTTP scanner with initialization, session handling, negotiated protocol headers, and paginated `tools/list` discovery.
 - Canonical `dvar.inventory.json` observations and explicit `dvar.lock.json` approval records.
 - Risk-aware inventory diffing for server, tool, schema, metadata, capability, endpoint, and risk changes.
-- Runtime integrity policy for unknown or changed servers and tools.
+- Runtime integrity policy for unknown and changed servers and tools.
 - MCP Streamable HTTP policy proxy for pre-execution `tools/call` enforcement.
 - CLI commands: `scan`, `inspect`, `lock`, `diff`, and `proxy`.
 - `@rokadhq/dvar/mcp` package export.
