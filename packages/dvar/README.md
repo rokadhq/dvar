@@ -2,12 +2,12 @@
 
 Dvar is the policy firewall for AI agents. It enforces policy, approvals, integrity, runtime safety, local-tool hardening, output protection, and framework-adapter controls around side effects.
 
-> **Status:** `0.7.0-alpha.0`. Public contracts remain pre-stable.
+> **Status:** `0.7.0` on npm's `alpha` channel. Public contracts remain pre-stable.
 
 ## Install
 
 ```bash
-npm install @rokadhq/dvar
+npm install @rokadhq/dvar@alpha
 ```
 
 ## Version 0.7
