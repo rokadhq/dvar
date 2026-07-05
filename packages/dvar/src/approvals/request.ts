@@ -23,7 +23,8 @@ const DEFAULT_BINDINGS = [
   "tool.name",
   "arguments",
   "resources",
-  "destination"
+  "destination",
+  "usage"
 ];
 
 export class DvarApprovalRequestError extends DvarError {
@@ -68,7 +69,6 @@ export function approvalBindings(
   ]));
 }
 
-
 export function approvalActionHash(action: DvarAction): string {
   return sha256({
     principal: action.principal,
@@ -81,7 +81,8 @@ export function approvalActionHash(action: DvarAction): string {
     tool: action.tool,
     arguments: action.arguments,
     resources: action.resources ?? null,
-    destination: action.destination ?? null
+    destination: action.destination ?? null,
+    usage: action.usage ?? null
   });
 }
 
@@ -116,6 +117,7 @@ export function createApprovalRequest(
   const argumentsHash = sha256(action.arguments);
   const resourcesHash = action.resources === undefined ? undefined : sha256(action.resources);
   const destinationHash = action.destination === undefined ? undefined : sha256(action.destination);
+  const usageHash = action.usage === undefined ? undefined : sha256(action.usage);
   return {
     version: "1",
     id: randomUUID(),
@@ -146,6 +148,8 @@ export function createApprovalRequest(
     ...(resourcesHash !== undefined ? { resourcesHash } : {}),
     ...(action.destination !== undefined ? { destination: action.destination } : {}),
     ...(destinationHash !== undefined ? { destinationHash } : {}),
+    ...(action.usage !== undefined ? { usage: action.usage } : {}),
+    ...(usageHash !== undefined ? { usageHash } : {}),
     summary: `Agent ${action.agent.id} requests ${action.tool.name} on ${action.server.id} in ${action.environment}`,
     ...(typeof action.tool.annotations?.destructiveHint === "boolean"
       ? { reversible: action.tool.annotations.destructiveHint !== true }

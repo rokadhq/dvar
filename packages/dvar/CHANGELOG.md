@@ -2,6 +2,25 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
+## 0.4.0-alpha.0
+
+### Added
+
+- Execution-time `authorize()`, runtime-state commits, outcome recording, and diagnostics.
+- Task/session limits and scoped call, cost, and monetary quotas.
+- Depth, retry, consecutive-tool, loop-detection, and circuit-breaker controls.
+- In-memory and Redis/Valkey-compatible runtime stores.
+- Runtime-aware protected-tool and MCP enforcement.
+- Usage-bound approval grants and runtime audit metadata.
+- `@rokadhq/dvar/runtime-safety` export.
+
+### Security
+
+- Policy previews do not consume runtime state.
+- Strict mode fails closed on store unavailability.
+- Multi-instance stateful enforcement requires a shared store.
+- Runtime accounting headers are not forwarded through the MCP proxy.
+
 ## 0.3.0-alpha.0
 
 ### Added

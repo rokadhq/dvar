@@ -1,15 +1,24 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { IncomingMessage } from "node:http";
+import { performance } from "node:perf_hooks";
 import type {
+  DvarAction,
   DvarDecision,
   DvarEvaluationOptions
 } from "../types.js";
 import type { DvarRuntime } from "../runtime.js";
+import type { DvarRuntimeUsage } from "../runtime-safety/index.js";
 import {
   createMcpHttpProxy as createBaseMcpHttpProxy,
   type DvarMcpProxy,
   type DvarMcpProxyOptions
 } from "./proxy.js";
+
+interface ProxyRuntimeContext {
+  approvalGrant?: string;
+  usage?: DvarRuntimeUsage;
+  actions: DvarAction[];
+}
 
 function requestHeader(
   request: IncomingMessage,
@@ -17,6 +26,37 @@ function requestHeader(
 ): string | undefined {
   const value = request.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function finiteHeader(
+  request: IncomingMessage,
+  name: string
+): number | undefined {
+  const value = requestHeader(request, name);
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function requestUsage(request: IncomingMessage): DvarRuntimeUsage | undefined {
+  const retry = finiteHeader(request, "x-dvar-retry");
+  const cost = finiteHeader(request, "x-dvar-cost");
+  const monetaryValue = finiteHeader(request, "x-dvar-monetary-value");
+  const currency = requestHeader(request, "x-dvar-currency");
+  if (
+    retry === undefined
+    && cost === undefined
+    && monetaryValue === undefined
+    && currency === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    ...(retry !== undefined ? { retry } : {}),
+    ...(cost !== undefined ? { cost } : {}),
+    ...(monetaryValue !== undefined ? { monetaryValue } : {}),
+    ...(currency !== undefined ? { currency } : {})
+  };
 }
 
 function providerFailureDecision(
@@ -49,28 +89,49 @@ function providerFailureDecision(
   };
 }
 
-async function evaluateForProxy(
+function rememberAllowed(
+  context: ProxyRuntimeContext | undefined,
+  action: DvarAction,
+  decision: DvarDecision
+): DvarDecision {
+  if (decision.effect === "allow") context?.actions.push(action);
+  return decision;
+}
+
+async function authorizeForProxy(
   runtime: DvarRuntime,
-  action: Parameters<DvarRuntime["evaluate"]>[0],
+  action: DvarAction,
   approvalGrant: string | undefined,
+  context: ProxyRuntimeContext | undefined,
   evaluationOptions: DvarEvaluationOptions = {}
 ): Promise<DvarDecision> {
-  const decision = await runtime.evaluate(action, {
-    ...evaluationOptions,
-    ...(approvalGrant !== undefined ? { approvalGrant } : {})
-  });
-  if (
-    approvalGrant !== undefined
-    || decision.mode === "monitor"
-    || decision.effect !== "require_approval"
-  ) {
-    return decision;
+  const effectiveAction = context?.usage === undefined
+    ? action
+    : { ...action, usage: context.usage };
+
+  if (approvalGrant !== undefined) {
+    const decision = await runtime.authorize(effectiveAction, {
+      ...evaluationOptions,
+      approvalGrant
+    });
+    return rememberAllowed(context, effectiveAction, decision);
   }
 
+  const decision = await runtime.evaluate(effectiveAction, evaluationOptions);
+  if (decision.mode === "monitor" || decision.effect === "allow") {
+    const committed = await runtime.commitRuntime(effectiveAction, decision);
+    return rememberAllowed(context, effectiveAction, committed);
+  }
+  if (decision.effect !== "require_approval") return decision;
+
   try {
-    const result = await runtime.requestApproval(action, decision);
+    const result = await runtime.requestApproval(effectiveAction, decision);
     if (result.status === "approved" && result.grant !== undefined) {
-      return runtime.resume(action, result.grant);
+      const approved = await runtime.authorize(effectiveAction, {
+        ...evaluationOptions,
+        approvalGrant: result.grant
+      });
+      return rememberAllowed(context, effectiveAction, approved);
     }
     if (result.status === "rejected") {
       const { observedEffect: _observservedEffect, ...base } = decision;
@@ -110,21 +171,25 @@ async function evaluateForProxy(
       }
     };
   } catch {
-    return providerFailureDecision(runtime, decision);
+    const failure = providerFailureDecision(runtime, decision);
+    if (failure.effect !== "allow") return failure;
+    const committed = await runtime.commitRuntime(effectiveAction, failure);
+    return rememberAllowed(context, effectiveAction, committed);
   }
 }
 
 /**
- * Approval-aware MCP proxy facade.
+ * Approval- and runtime-safety-aware MCP proxy facade.
  *
- * The `x-dvar-approval-grant` header is consumed only by Dvar. The underlying
- * proxy forwards an explicit header allowlist, so the grant never reaches the
- * MCP server.
+ * Dvar consumes approval and accounting headers locally. The underlying proxy
+ * forwards an explicit header allowlist, so these values never reach the MCP
+ * server.
  */
 export function createMcpHttpProxy(
   options: DvarMcpProxyOptions
 ): DvarMcpProxy {
-  const approvalContext = new AsyncLocalStorage<string | undefined>();
+  const runtimeContext = new AsyncLocalStorage<ProxyRuntimeContext>();
+  const upstreamFetch = options.fetch ?? globalThis.fetch;
   const runtime = new Proxy(options.runtime, {
     get(target, property, receiver) {
       if (property !== "evaluate") {
@@ -133,22 +198,62 @@ export function createMcpHttpProxy(
       return (
         action: Parameters<DvarRuntime["evaluate"]>[0],
         evaluationOptions: DvarEvaluationOptions = {}
-      ) => evaluateForProxy(
-        target,
-        action,
-        evaluationOptions.approvalGrant ?? approvalContext.getStore(),
-        evaluationOptions
-      );
+      ) => {
+        const current = runtimeContext.getStore();
+        return authorizeForProxy(
+          target,
+          action,
+          evaluationOptions.approvalGrant ?? current?.approvalGrant,
+          current,
+          evaluationOptions
+        );
+      };
     }
   }) as DvarRuntime;
 
-  const proxy = createBaseMcpHttpProxy({ ...options, runtime });
+  const fetchWithOutcome: typeof globalThis.fetch = async (input, init) => {
+    const startedAt = performance.now();
+    const current = runtimeContext.getStore();
+    const actions = current?.actions.splice(0) ?? [];
+    try {
+      const response = await upstreamFetch(input, init);
+      for (const action of actions) {
+        await options.runtime.recordOutcome(action, {
+          success: response.ok,
+          durationMs: performance.now() - startedAt
+        });
+      }
+      return response;
+    } catch (error) {
+      for (const action of actions) {
+        await options.runtime.recordOutcome(action, {
+          success: false,
+          durationMs: performance.now() - startedAt,
+          ...(error instanceof Error && error.name !== "Error"
+            ? { errorCode: error.name }
+            : {})
+        });
+      }
+      throw error;
+    }
+  };
+
+  const proxy = createBaseMcpHttpProxy({
+    ...options,
+    runtime,
+    fetch: fetchWithOutcome
+  });
   const requestListeners = proxy.server.listeners("request");
   proxy.server.removeAllListeners("request");
   for (const listener of requestListeners) {
     proxy.server.on("request", (request, response) => {
-      const grant = requestHeader(request, "x-dvar-approval-grant");
-      approvalContext.run(grant, () => {
+      const approvalGrant = requestHeader(request, "x-dvar-approval-grant");
+      const usage = requestUsage(request);
+      runtimeContext.run({
+        ...(approvalGrant !== undefined ? { approvalGrant } : {}),
+        ...(usage !== undefined ? { usage } : {}),
+        actions: []
+      }, () => {
         Reflect.apply(listener, proxy.server, [request, response]);
       });
     });

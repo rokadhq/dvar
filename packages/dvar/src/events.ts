@@ -34,6 +34,7 @@ export function decisionEvent(action: DvarAction, decision: DvarDecision): DvarA
     : decision.effect === "require_approval"
       ? "dvar.action.approval_required"
       : "dvar.action.allowed";
+  const runtime = decision.runtimeSafety;
 
   return {
     type,
@@ -55,7 +56,18 @@ export function decisionEvent(action: DvarAction, decision: DvarDecision): DvarA
     policyVersion: decision.policyVersion,
     policyHash: decision.policyHash,
     risk: decision.risk,
-    durationMs: decision.durationMs
+    durationMs: decision.durationMs,
+    ...(runtime !== undefined
+      ? {
+          runtimeControl: runtime.control,
+          runtimeStore: runtime.store,
+          runtimeDistributed: runtime.distributed,
+          ...(runtime.current !== undefined ? { runtimeCurrent: runtime.current } : {}),
+          ...(runtime.limit !== undefined ? { runtimeLimit: runtime.limit } : {}),
+          ...(runtime.resetAt !== undefined ? { runtimeResetAt: runtime.resetAt } : {}),
+          ...(runtime.circuitState !== undefined ? { runtimeCircuitState: runtime.circuitState } : {})
+        }
+      : {})
   };
 }
 

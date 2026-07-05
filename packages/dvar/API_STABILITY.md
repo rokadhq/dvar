@@ -2,15 +2,6 @@
 
 Dvar is currently pre-1.0.
 
-The following are deliberate contracts but may still evolve with documented migration guidance:
+Deliberate contracts include terminal effects, enforcement modes, approval scopes, runtime metrics and scope dimensions, side-effect-free `evaluate()`, execution-time `authorize()`, versioned records, and machine-readable reason codes.
 
-- terminal effects: `allow`, `deny`, `require_approval`;
-- modes: `off`, `monitor`, `enforce`, `strict`;
-- approval scopes: `once`, `session`, `task`;
-- canonical policy file: `dvar.yaml` with JSON support;
-- canonical inventory file: `dvar.inventory.json`;
-- canonical lockfile name: `dvar.lock.json`;
-- versioned policy, inventory, lockfile, and approval request records;
-- stable machine-readable reason codes.
-
-The approval-provider interfaces, use-store interface, compact grant format, MCP integration, and framework adapters are experimental before 1.0. Breaking changes require release notes and migration guidance.
+The runtime-store interface, Redis/Valkey adapters, quota reservation semantics, loop fingerprints, circuit-breaker outcome interpretation, approval formats, MCP integration, and framework adapters remain experimental before 1.0. Breaking changes require release notes and migration guidance.

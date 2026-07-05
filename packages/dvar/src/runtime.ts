@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
+import "./runtime-safety/augment.js";
 import {
   createApprovalRequest as buildApprovalRequest,
   InMemoryApprovalUseStore,
@@ -36,6 +37,13 @@ import { findLockedTool, loadLockfile, validateLockfile } from "./lockfile.js";
 import { evaluatePolicy, type EvaluateOptions } from "./policy/engine.js";
 import { loadPolicy, validatePolicy } from "./policy/load.js";
 import { assessRisk } from "./risk.js";
+import {
+  createRuntimeGuard,
+  DvarRuntimeStoreError,
+  type DvarRuntimeDiagnostics,
+  type DvarRuntimeOutcome,
+  type DvarRuntimeSafetyFailure
+} from "./runtime-safety/index.js";
 import type {
   DvarAction,
   DvarApprovalProviderResult,
@@ -56,6 +64,10 @@ export interface DvarRuntime {
   readonly policyHash: string;
   readonly lockfile?: DvarLockfile;
   evaluate(action: DvarAction, options?: DvarEvaluationOptions): Promise<DvarDecision>;
+  authorize(action: DvarAction, options?: DvarEvaluationOptions): Promise<DvarDecision>;
+  commitRuntime(action: DvarAction, decision: DvarDecision): Promise<DvarDecision>;
+  recordOutcome(action: DvarAction, outcome: DvarRuntimeOutcome): Promise<void>;
+  diagnostics(): Promise<DvarRuntimeDiagnostics>;
   createApprovalRequest(action: DvarAction, decision?: DvarDecision): Promise<DvarApprovalRequest>;
   requestApproval(action: DvarAction, decision?: DvarDecision): Promise<DvarApprovalProviderResult>;
   resume(action: DvarAction, approvalGrant: string): Promise<DvarDecision>;
@@ -63,6 +75,12 @@ export interface DvarRuntime {
   protectTool<TArguments, TResult>(
     definition: DvarToolDefinition<TArguments, TResult>
   ): DvarProtectedTool<TArguments, TResult>;
+}
+
+interface InternalEvaluationOptions
+  extends EvaluateOptions,
+    DvarEvaluationOptions {
+  commitRuntime?: boolean;
 }
 
 function validationMessage(errors: ErrorObject[] | null | undefined): string {
@@ -95,7 +113,8 @@ function buildAction<TArguments>(
     ...(context.resources !== undefined ? { resources: context.resources } : {}),
     ...(context.destination !== undefined ? { destination: context.destination } : {}),
     ...(context.trace !== undefined ? { trace: context.trace } : {}),
-    ...(context.metadata !== undefined ? { metadata: context.metadata } : {})
+    ...(context.metadata !== undefined ? { metadata: context.metadata } : {}),
+    ...(context.usage !== undefined ? { usage: context.usage } : {})
   };
 }
 
@@ -126,6 +145,65 @@ function providerFailureDecision(
   };
 }
 
+function runtimeFailureDecision(
+  policy: DvarPolicy,
+  decision: DvarDecision,
+  failure: DvarRuntimeSafetyFailure
+): DvarDecision {
+  const monitor = policy.mode === "monitor";
+  const { observedEffect: _observedEffect, ...base } = decision;
+  return {
+    ...base,
+    effect: monitor ? "allow" : "deny",
+    ...(monitor ? { observedEffect: "would_deny" as const } : {}),
+    ruleId: failure.ruleId,
+    reasonCode: failure.reasonCode,
+    message: failure.message,
+    runtimeSafety: failure.summary
+  };
+}
+
+async function runtimeStoreFailureDecision(
+  policy: DvarPolicy,
+  decision: DvarDecision,
+  diagnostics: () => Promise<DvarRuntimeDiagnostics>,
+  error: unknown
+): Promise<DvarDecision> {
+  const allow = policy.mode !== "strict"
+    && policy.runtime?.onRuntimeStoreError === "allow";
+  const monitor = policy.mode === "monitor";
+  const { observedEffect: _observedEffect, ...base } = decision;
+  let store = "unknown";
+  let distributed = false;
+  try {
+    const current = await diagnostics();
+    store = current.store.kind;
+    distributed = current.store.distributed;
+  } catch {
+    // Preserve the original runtime-store failure.
+  }
+  return {
+    ...base,
+    effect: allow || monitor ? "allow" : "deny",
+    ...(monitor ? { observedEffect: "would_deny" as const } : {}),
+    ruleId: "system.runtime_store",
+    reasonCode: allow
+      ? "runtime.store_error_fail_open"
+      : "runtime.store_unavailable",
+    message: allow
+      ? "Runtime store failed and policy explicitly allowed fail-open execution"
+      : error instanceof Error
+        ? error.message
+        : "Runtime store is unavailable",
+    runtimeSafety: {
+      status: "store_error",
+      control: "runtimeStore",
+      store,
+      distributed
+    }
+  };
+}
+
 function requiresApproval(decision: DvarDecision): boolean {
   return decision.effect === "require_approval";
 }
@@ -148,10 +226,42 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
       : undefined;
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const approvalUseStore = options.approval?.useStore ?? new InMemoryApprovalUseStore();
+  const runtimeGuard = createRuntimeGuard(policy, options.runtimeSafety);
+  const runtimeStoreKind = options.runtimeSafety?.store?.kind ?? "memory";
+  const runtimeStoreDistributed = options.runtimeSafety?.store?.distributed ?? false;
+
+  async function commitRuntimeInternal(
+    action: DvarAction,
+    decision: DvarDecision
+  ): Promise<DvarDecision> {
+    if (decision.effect !== "allow") return decision;
+    try {
+      const runtimeFailure = await runtimeGuard.before(action);
+      if (runtimeFailure !== undefined) {
+        return runtimeFailureDecision(policy, decision, runtimeFailure);
+      }
+      return {
+        ...decision,
+        runtimeSafety: {
+          status: "allowed",
+          control: "runtimeGuard",
+          store: runtimeStoreKind,
+          distributed: runtimeStoreDistributed
+        }
+      };
+    } catch (error) {
+      return runtimeStoreFailureDecision(
+        policy,
+        decision,
+        () => runtimeGuard.diagnostics(),
+        error
+      );
+    }
+  }
 
   async function evaluateInternal(
     action: DvarAction,
-    evaluateOptions: EvaluateOptions & DvarEvaluationOptions = {}
+    evaluateOptions: InternalEvaluationOptions = {}
   ): Promise<DvarDecision> {
     const startedAt = performance.now();
     let actionHash: string;
@@ -177,7 +287,7 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
           ? { guardrailFailure: integrityFailure }
           : {})
       });
-      const decision = await processApprovalDecision({
+      let decision = await processApprovalDecision({
         policy,
         action,
         decision: baseDecision,
@@ -187,6 +297,11 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
           : {}),
         useStore: approvalUseStore
       });
+
+      if (evaluateOptions.commitRuntime === true) {
+        decision = await commitRuntimeInternal(action, decision);
+      }
+
       await emitSafely(options.eventSink, decisionEvent(action, decision));
       const integrityEvent = integrityMismatchEvent(action, decision);
       if (integrityEvent !== undefined) await emitSafely(options.eventSink, integrityEvent);
@@ -218,6 +333,25 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
       };
       await emitSafely(options.eventSink, internalErrorEvent(action, decision));
       return decision;
+    }
+  }
+
+  async function recordOutcomeInternal(
+    action: DvarAction,
+    outcome: DvarRuntimeOutcome
+  ): Promise<void> {
+    try {
+      await runtimeGuard.after(action, outcome);
+    } catch (error) {
+      const failOpen = policy.mode === "off"
+        || policy.mode === "monitor"
+        || (policy.mode !== "strict" && policy.runtime?.onRuntimeStoreError === "allow");
+      if (failOpen) return;
+      if (error instanceof DvarRuntimeStoreError) throw error;
+      throw new DvarRuntimeStoreError(
+        error instanceof Error ? error.message : "Runtime outcome update failed",
+        error instanceof Error ? { cause: error } : undefined
+      );
     }
   }
 
@@ -270,6 +404,7 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
         };
       }
       let decision = await evaluateInternal(action, {
+        commitRuntime: true,
         ...(guardrailFailure !== undefined ? { guardrailFailure } : {}),
         ...(context.approvalGrant !== undefined ? { approvalGrant: context.approvalGrant } : {})
       });
@@ -277,33 +412,64 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
       if (requiresApproval(decision)) {
         const request = decision.approvalRequest ?? await createRequest(action, decision);
         if (options.approval?.provider !== undefined && options.approval.autoRequest !== false) {
-          let providerResult: DvarApprovalProviderResult;
+          let providerResult: DvarApprovalProviderResult | undefined;
           try {
             providerResult = await requestApproval(action, decision);
           } catch (error) {
             const allow = policy.mode !== "strict" && policy.runtime?.onApprovalProviderError === "allow";
             const failureDecision = providerFailureDecision(decision, request, allow);
             await emitSafely(options.eventSink, decisionEvent(action, failureDecision));
-            if (allow) return definition.execute(arguments_, context);
-            if (error instanceof DvarApprovalProviderError) throw error;
-            throw new DvarApprovalProviderError(request, error);
+            if (!allow) {
+              if (error instanceof DvarApprovalProviderError) throw error;
+              throw new DvarApprovalProviderError(request, error);
+            }
+            decision = await commitRuntimeInternal(action, failureDecision);
+            if (decision.effect === "deny") throw new DvarDeniedError(decision);
           }
-          if (providerResult.status === "approved" && providerResult.grant !== undefined) {
-            decision = await evaluateInternal(action, { approvalGrant: providerResult.grant });
+          if (providerResult?.status === "approved" && providerResult.grant !== undefined) {
+            decision = await evaluateInternal(action, {
+              approvalGrant: providerResult.grant,
+              commitRuntime: true
+            });
             if (decision.effect === "deny") throw new DvarDeniedError(decision);
             if (requiresApproval(decision)) {
               throw new DvarApprovalRequiredError(decision);
             }
-            return definition.execute(arguments_, context);
-          }
-          if (providerResult.status === "rejected") {
+          } else if (providerResult?.status === "rejected") {
             throw new DvarApprovalRejectedError(decision, request, providerResult);
+          } else if (providerResult !== undefined) {
+            throw new DvarApprovalRequiredError(decision);
           }
+        } else {
           throw new DvarApprovalRequiredError(decision);
         }
-        throw new DvarApprovalRequiredError(decision);
       }
-      return definition.execute(arguments_, context);
+
+      const executionStartedAt = performance.now();
+      try {
+        const result = await definition.execute(arguments_, context);
+        await recordOutcomeInternal(action, {
+          success: true,
+          durationMs: performance.now() - executionStartedAt
+        });
+        return result;
+      } catch (error) {
+        try {
+          await recordOutcomeInternal(action, {
+            success: false,
+            durationMs: performance.now() - executionStartedAt,
+            ...(error instanceof Error && error.name !== "Error"
+              ? { errorCode: error.name }
+              : {})
+          });
+        } catch (storeError) {
+          throw new AggregateError(
+            [error, storeError],
+            "Tool execution and runtime outcome recording both failed"
+          );
+        }
+        throw error;
+      }
     };
   }
 
@@ -313,10 +479,15 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
     ...(lockfile !== undefined ? { lockfile } : {}),
     evaluate: (action: DvarAction, evaluateOptions: DvarEvaluationOptions = {}) =>
       evaluateInternal(action, evaluateOptions),
+    authorize: (action: DvarAction, evaluateOptions: DvarEvaluationOptions = {}) =>
+      evaluateInternal(action, { ...evaluateOptions, commitRuntime: true }),
+    commitRuntime: commitRuntimeInternal,
+    recordOutcome: recordOutcomeInternal,
+    diagnostics: () => runtimeGuard.diagnostics(),
     createApprovalRequest: createRequest,
     requestApproval,
     resume: (action: DvarAction, approvalGrant: string) =>
-      evaluateInternal(action, { approvalGrant }),
+      evaluateInternal(action, { approvalGrant, commitRuntime: true }),
     lockedTool: (serverId: string, toolName: string, endpoint?: string) =>
       findLockedTool(lockfile, serverId, toolName, endpoint),
     protectTool

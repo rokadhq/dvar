@@ -1,8 +1,8 @@
 # `@rokadhq/dvar`
 
-Dvar is the policy firewall for AI agents. It evaluates tool actions before side effects occur and returns a deterministic `allow`, `deny`, or `require_approval` decision.
+Dvar is the policy firewall for AI agents. It enforces policy, approvals, integrity, and runtime-safety controls before tool side effects occur.
 
-> **Status:** `0.3.0-alpha.0`. Public contracts remain pre-stable.
+> **Status:** `0.4.0-alpha.0`. Public contracts remain pre-stable.
 
 ## Install
 
@@ -10,49 +10,42 @@ Dvar is the policy firewall for AI agents. It evaluates tool actions before side
 npm install @rokadhq/dvar
 ```
 
-## Version 0.3
+## Version 0.4
 
-Dvar 0.3 adds:
-
-- structured approval requests;
-- signed, expiring approval grants;
-- bounded `once`, `session`, and `task` scopes;
-- replay detection and configurable use limits;
-- provider interfaces and a webhook reference provider;
-- runtime interruption and resume APIs;
-- approval-aware MCP proxying;
-- OpenAI Agents interruption helpers;
-- approval lifecycle audit events.
+Dvar 0.4 adds execution-time quotas, loop detection, circuit breakers, shared runtime stores, runtime-aware MCP enforcement, and usage-bound approvals.
 
 ```yaml
-rules:
-  - id: approve-refund
-    effect: require_approval
-    when:
-      tool.name: billing.refund
-    approval:
-      provider: webhook
-      scope: once
-      expiresInSeconds: 300
-      maxUses: 1
-      bind:
-        - principal.id
-        - agent.id
-        - tenant.id
-        - environment
-        - server.id
-        - tool.name
-        - arguments
+runtime:
+  onRuntimeStoreError: deny
+  requireDistributedStore: true
+  maxToolCallsPerTask: 40
+  maxDepth: 12
+  maxRetries: 2
+
+  quotas:
+    - id: tenant-daily-inr
+      metric: monetary
+      limit: 25000
+      currency: INR
+      windowSeconds: 86400
+      scope: [tenant]
+
+  loopDetection:
+    maxRepeatedAction: 3
+    maxOscillations: 3
+    scope: [task]
+
+  circuitBreakers:
+    - id: production-billing
+      failureThreshold: 5
+      recoverySeconds: 60
+      scope: [environment, server, tool]
 ```
 
-Use `@rokadhq/dvar/approvals` for signers, providers, and approval-use stores. Use `runtime.resume(action, grant)` to continue a delayed action after verification.
+Use `@rokadhq/dvar/runtime-safety` for the in-memory store, Redis/Valkey-compatible adapters, store contracts, and diagnostics.
 
-Use `@rokadhq/dvar/adapters/openai-agents` for structurally typed interruption helpers without an additional runtime dependency.
+`evaluate()` is side-effect-free and does not consume quotas. Use `authorize()`, `protectTool()`, or the MCP proxy immediately before execution. Call `recordOutcome()` after manually authorized execution so circuit breakers receive the result.
 
-The MCP proxy accepts delayed approval grants through `X-Dvar-Approval-Grant`; Dvar consumes this header locally and does not forward it to the upstream tool server.
+Process-local runtime state is valid only for one enforcement process. Multi-instance deployments require a shared atomic store.
 
-## Deployment note
-
-`InMemoryApprovalUseStore` is intended for development and single-process deployments. Distributed enforcement requires an atomic shared implementation of `DvarApprovalUseStore`.
-
-See `docs/approvals.md`, `docs/mcp-security.md`, and `docs/threat-model.md` for detailed contracts and residual risks.
+See `docs/runtime-safety.md`, `docs/approvals.md`, `docs/mcp-security.md`, and `docs/threat-model.md` for detailed contracts and residual risks.

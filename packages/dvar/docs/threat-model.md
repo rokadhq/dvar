@@ -1,9 +1,9 @@
 # Dvar Threat Model
 
-Dvar treats model output, user content, tool metadata, MCP servers, approval requests, provider responses, and external destinations as potentially hostile.
+Dvar treats model output, tool metadata, MCP servers, approval services, runtime state, accounting context, and external destinations as potentially incorrect or compromised.
 
-Version 0.3 adds structured approval requests, semantic action hashing, signed and bounded grants, expiry and use-count enforcement, replay resistance, provider failure separation, strict-mode fail-closed behavior, MCP grant stripping, and privacy-conscious approval events.
+Version 0.4 adds execution-time quotas, depth/retry ceilings, loop detection, circuit breakers, shared-store requirements, strict-mode store failure behavior, usage-bound approvals, and runtime-aware MCP enforcement.
 
-Residual approval risks include compromised signing keys or providers, inattentive reviewers, overly broad session or task bindings, and process-local replay tracking in distributed deployments. Approval does not prove correct reasoning or replace IAM, application authorization, sandboxing, or separation of duties.
+Residual risks include execution paths that bypass Dvar, inconsistent distributed key namespaces, untrusted accounting values, conservative quota reservations, loop false positives, HTTP-level MCP circuit outcomes, and unauthenticated identity or usage headers.
 
-Tool output filtering, distributed quotas, stdio process containment, and OpenTelemetry exporters remain later controls.
+Dvar complements IAM, application authorization, sandboxing, workload isolation, secrets management, database permissions, and network policy; it does not replace them.

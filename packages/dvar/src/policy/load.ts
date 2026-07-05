@@ -65,6 +65,28 @@ function semanticDiagnostics(policy: DvarPolicy): string[] {
       );
     }
   }
+
+  const quotaIds = new Set<string>();
+  for (const quota of policy.runtime?.quotas ?? []) {
+    if (quotaIds.has(quota.id)) {
+      diagnostics.push(`Duplicate runtime quota id: ${quota.id}`);
+    }
+    quotaIds.add(quota.id);
+    if (quota.metric === "calls" && quota.currency !== undefined) {
+      diagnostics.push(
+        `Runtime quota ${quota.id} cannot declare currency for calls`
+      );
+    }
+  }
+
+  const breakerIds = new Set<string>();
+  for (const breaker of policy.runtime?.circuitBreakers ?? []) {
+    if (breakerIds.has(breaker.id)) {
+      diagnostics.push(`Duplicate circuit breaker id: ${breaker.id}`);
+    }
+    breakerIds.add(breaker.id);
+  }
+
   return diagnostics;
 }
 
