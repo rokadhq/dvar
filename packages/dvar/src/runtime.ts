@@ -1,8 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
+import {
+  createApprovalRequest as buildApprovalRequest,
+  InMemoryApprovalUseStore,
+  processApprovalDecision,
+  submitApprovalRequest
+} from "./approvals/index.js";
 import { sha256 } from "./canonical.js";
-import { DvarApprovalRequiredError, DvarConfigurationError, DvarDeniedError } from "./errors.js";
+import {
+  DvarApprovalRequiredError,
+  DvarConfigurationError,
+  DvarDeniedError
+} from "./errors.js";
+import {
+  DvarApprovalProviderError,
+  DvarApprovalRejectedError
+} from "./approvals/errors.js";
 import {
   decisionEvent,
   emitSafely,
@@ -10,18 +24,28 @@ import {
   internalErrorEvent,
   proposedEvent
 } from "./events.js";
-import { loadPolicy, validatePolicy } from "./policy/load.js";
+import {
+  approvalConsumedEvent,
+  approvalProviderErrorEvent,
+  approvalProviderResultEvent,
+  approvalReplayEvent,
+  approvalRequestEvent
+} from "./approvals/events.js";
 import { evaluateIntegrity } from "./integrity.js";
 import { findLockedTool, loadLockfile, validateLockfile } from "./lockfile.js";
 import { evaluatePolicy, type EvaluateOptions } from "./policy/engine.js";
+import { loadPolicy, validatePolicy } from "./policy/load.js";
 import { assessRisk } from "./risk.js";
 import type {
   DvarAction,
+  DvarApprovalProviderResult,
+  DvarApprovalRequest,
   DvarCreateOptions,
   DvarDecision,
-  DvarPolicy,
-  DvarLockfile,
+  DvarEvaluationOptions,
   DvarInventoryTool,
+  DvarLockfile,
+  DvarPolicy,
   DvarProtectedTool,
   DvarToolContext,
   DvarToolDefinition
@@ -31,7 +55,10 @@ export interface DvarRuntime {
   readonly policy: DvarPolicy;
   readonly policyHash: string;
   readonly lockfile?: DvarLockfile;
-  evaluate(action: DvarAction): Promise<DvarDecision>;
+  evaluate(action: DvarAction, options?: DvarEvaluationOptions): Promise<DvarDecision>;
+  createApprovalRequest(action: DvarAction, decision?: DvarDecision): Promise<DvarApprovalRequest>;
+  requestApproval(action: DvarAction, decision?: DvarDecision): Promise<DvarApprovalProviderResult>;
+  resume(action: DvarAction, approvalGrant: string): Promise<DvarDecision>;
   lockedTool(serverId: string, toolName: string, endpoint?: string): DvarInventoryTool | undefined;
   protectTool<TArguments, TResult>(
     definition: DvarToolDefinition<TArguments, TResult>
@@ -72,6 +99,37 @@ function buildAction<TArguments>(
   };
 }
 
+function providerFailureDecision(
+  decision: DvarDecision,
+  request: DvarApprovalRequest,
+  allow: boolean
+): DvarDecision {
+  const { observedEffect: _observedEffect, ...baseDecision } = decision;
+  return {
+    ...baseDecision,
+    effect: allow ? "allow" : "deny",
+    ruleId: "system.approval_provider",
+    reasonCode: allow
+      ? "approval.provider_error_fail_open"
+      : "approval.provider_unavailable",
+    message: allow
+      ? "Approval provider failed and policy explicitly allowed fail-open execution"
+      : "Approval provider is unavailable",
+    approvalRequest: request,
+    approval: {
+      status: "provider_error",
+      requestId: request.id,
+      scope: request.scope,
+      provider: request.provider,
+      reason: "approval.provider_unavailable"
+    }
+  };
+}
+
+function requiresApproval(decision: DvarDecision): boolean {
+  return decision.effect === "require_approval";
+}
+
 export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarRuntime> {
   if (options.policy !== undefined && options.policyPath !== undefined) {
     throw new DvarConfigurationError("Provide either policy or policyPath, not both");
@@ -89,10 +147,11 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
       ? await loadLockfile(options.lockfilePath)
       : undefined;
   const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const approvalUseStore = options.approval?.useStore ?? new InMemoryApprovalUseStore();
 
   async function evaluateInternal(
     action: DvarAction,
-    evaluateOptions: EvaluateOptions = {}
+    evaluateOptions: EvaluateOptions & DvarEvaluationOptions = {}
   ): Promise<DvarDecision> {
     const startedAt = performance.now();
     let actionHash: string;
@@ -112,15 +171,29 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
 
     try {
       const integrityFailure = evaluateIntegrity(policy, lockfile, action);
-      const decision = evaluatePolicy(policy, policyHash, action, {
+      const baseDecision = evaluatePolicy(policy, policyHash, action, {
         ...evaluateOptions,
         ...(evaluateOptions.guardrailFailure === undefined && integrityFailure !== undefined
           ? { guardrailFailure: integrityFailure }
           : {})
       });
+      const decision = await processApprovalDecision({
+        policy,
+        action,
+        decision: baseDecision,
+        ...(options.approval !== undefined ? { runtime: options.approval } : {}),
+        ...(evaluateOptions.approvalGrant !== undefined
+          ? { approvalGrant: evaluateOptions.approvalGrant }
+          : {}),
+        useStore: approvalUseStore
+      });
       await emitSafely(options.eventSink, decisionEvent(action, decision));
       const integrityEvent = integrityMismatchEvent(action, decision);
       if (integrityEvent !== undefined) await emitSafely(options.eventSink, integrityEvent);
+      const consumedEvent = approvalConsumedEvent(action, decision);
+      if (consumedEvent !== undefined) await emitSafely(options.eventSink, consumedEvent);
+      const replayEvent = approvalReplayEvent(action, decision);
+      if (replayEvent !== undefined) await emitSafely(options.eventSink, replayEvent);
       return decision;
     } catch {
       const configuredEffect = policy.runtime?.onEvaluationError === "allow" ? "allow" : "deny";
@@ -148,13 +221,43 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
     }
   }
 
+  async function createRequest(
+    action: DvarAction,
+    suppliedDecision?: DvarDecision
+  ): Promise<DvarApprovalRequest> {
+    const decision = suppliedDecision ?? await evaluateInternal(action);
+    if (decision.approvalRequest !== undefined) return decision.approvalRequest;
+    if (decision.effect !== "require_approval" && decision.observedEffect !== "would_require_approval") {
+      throw new DvarConfigurationError("Action does not currently require approval");
+    }
+    return buildApprovalRequest(policy, action, decision, {
+      ...(options.approval?.provider?.name !== undefined
+        ? { provider: options.approval.provider.name }
+        : {})
+    });
+  }
+
+  async function requestApproval(
+    action: DvarAction,
+    suppliedDecision?: DvarDecision
+  ): Promise<DvarApprovalProviderResult> {
+    const request = await createRequest(action, suppliedDecision);
+    await emitSafely(options.eventSink, approvalRequestEvent(action, request));
+    try {
+      const result = await submitApprovalRequest(request, options.approval);
+      await emitSafely(options.eventSink, approvalProviderResultEvent(action, request, result));
+      return result;
+    } catch (error) {
+      await emitSafely(options.eventSink, approvalProviderErrorEvent(action, request));
+      throw new DvarApprovalProviderError(request, error);
+    }
+  }
+
   function protectTool<TArguments, TResult>(
     definition: DvarToolDefinition<TArguments, TResult>
   ): DvarProtectedTool<TArguments, TResult> {
     let validator: ValidateFunction | undefined;
-    if (definition.inputSchema !== undefined) {
-      validator = ajv.compile(definition.inputSchema);
-    }
+    if (definition.inputSchema !== undefined) validator = ajv.compile(definition.inputSchema);
 
     return async (arguments_: TArguments, context: DvarToolContext): Promise<TResult> => {
       const action = buildAction(definition, arguments_, context);
@@ -166,9 +269,40 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
           message: `Tool arguments failed JSON Schema validation: ${validationMessage(validator.errors)}`
         };
       }
-      const decision = await evaluateInternal(action, { ...(guardrailFailure !== undefined ? { guardrailFailure } : {}) });
+      let decision = await evaluateInternal(action, {
+        ...(guardrailFailure !== undefined ? { guardrailFailure } : {}),
+        ...(context.approvalGrant !== undefined ? { approvalGrant: context.approvalGrant } : {})
+      });
       if (decision.effect === "deny") throw new DvarDeniedError(decision);
-      if (decision.effect === "require_approval") throw new DvarApprovalRequiredError(decision);
+      if (requiresApproval(decision)) {
+        const request = decision.approvalRequest ?? await createRequest(action, decision);
+        if (options.approval?.provider !== undefined && options.approval.autoRequest !== false) {
+          let providerResult: DvarApprovalProviderResult;
+          try {
+            providerResult = await requestApproval(action, decision);
+          } catch (error) {
+            const allow = policy.mode !== "strict" && policy.runtime?.onApprovalProviderError === "allow";
+            const failureDecision = providerFailureDecision(decision, request, allow);
+            await emitSafely(options.eventSink, decisionEvent(action, failureDecision));
+            if (allow) return definition.execute(arguments_, context);
+            if (error instanceof DvarApprovalProviderError) throw error;
+            throw new DvarApprovalProviderError(request, error);
+          }
+          if (providerResult.status === "approved" && providerResult.grant !== undefined) {
+            decision = await evaluateInternal(action, { approvalGrant: providerResult.grant });
+            if (decision.effect === "deny") throw new DvarDeniedError(decision);
+            if (requiresApproval(decision)) {
+              throw new DvarApprovalRequiredError(decision);
+            }
+            return definition.execute(arguments_, context);
+          }
+          if (providerResult.status === "rejected") {
+            throw new DvarApprovalRejectedError(decision, request, providerResult);
+          }
+          throw new DvarApprovalRequiredError(decision);
+        }
+        throw new DvarApprovalRequiredError(decision);
+      }
       return definition.execute(arguments_, context);
     };
   }
@@ -177,7 +311,12 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
     policy,
     policyHash,
     ...(lockfile !== undefined ? { lockfile } : {}),
-    evaluate: evaluateInternal,
+    evaluate: (action: DvarAction, evaluateOptions: DvarEvaluationOptions = {}) =>
+      evaluateInternal(action, evaluateOptions),
+    createApprovalRequest: createRequest,
+    requestApproval,
+    resume: (action: DvarAction, approvalGrant: string) =>
+      evaluateInternal(action, { approvalGrant }),
     lockedTool: (serverId: string, toolName: string, endpoint?: string) =>
       findLockedTool(lockfile, serverId, toolName, endpoint),
     protectTool

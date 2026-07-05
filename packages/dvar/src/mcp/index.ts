@@ -4,8 +4,9 @@ export {
   validateMcpEndpoint,
   parseMcpResponseMessages
 } from "./client.js";
+export { createMcpHttpProxy } from "./approval-proxy.js";
 export {
-  createMcpHttpProxy,
+  createMcpHttpProxy as createBaseMcpHttpProxy,
   proxyContextToToolContext,
   type DvarMcpProxy,
   type DvarMcpProxyOptions,

@@ -23,6 +23,16 @@ export {
 } from "./lockfile.js";
 export { evaluateIntegrity, type DvarGuardrailResult } from "./integrity.js";
 export * from "./mcp/index.js";
+export * from "./approvals/index.js";
+export {
+  applyOpenAIAgentsApproval,
+  createOpenAIAgentsNeedsApproval,
+  resolveOpenAIAgentsInterruptions,
+  type OpenAIAgentsInterruptionLike,
+  type OpenAIAgentsRunStateLike,
+  type OpenAIAgentsApprovalResolution,
+  type OpenAIAgentsDvarEvaluatorOptions
+} from "./adapters/openai-agents.js";
 export {
   DvarError,
   DvarConfigurationError,

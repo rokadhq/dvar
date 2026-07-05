@@ -81,6 +81,25 @@ export interface DvarObligation {
   config?: Record<string, unknown>;
 }
 
+export type DvarApprovalScope = "once" | "session" | "task";
+export type DvarApprovalStatus =
+  | "required"
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "invalid"
+  | "provider_error";
+
+export interface DvarApprovalSummary {
+  status: DvarApprovalStatus;
+  requestId?: string;
+  grantId?: string;
+  scope?: DvarApprovalScope;
+  approverId?: string;
+  provider?: string;
+  reason?: string;
+}
+
 export interface DvarDecision {
   id: string;
   effect: DvarEffect;
@@ -96,6 +115,8 @@ export interface DvarDecision {
   actionHash: string;
   evaluatedAt: string;
   durationMs: number;
+  approvalRequest?: DvarApprovalRequest;
+  approval?: DvarApprovalSummary;
 }
 
 export type Primitive = string | number | boolean | null;
@@ -124,6 +145,8 @@ export interface DvarApprovalPolicy {
   provider?: string;
   expiresInSeconds?: number;
   bind?: string[];
+  scope?: DvarApprovalScope;
+  maxUses?: number;
 }
 
 export interface DvarRule {
@@ -179,12 +202,134 @@ export interface DvarPolicy {
   tests?: DvarPolicyTest[];
 }
 
+export interface DvarApprovalRequest {
+  version: "1";
+  id: string;
+  actionId: string;
+  decisionId: string;
+  actionHash: string;
+  policyHash: string;
+  policyVersion: string;
+  ruleId: string;
+  provider: string;
+  scope: DvarApprovalScope;
+  bind: string[];
+  bindings: Record<string, string>;
+  requestedAt: string;
+  expiresAt: string;
+  maxUses: number;
+  principal: DvarPrincipal;
+  agent: DvarAgent;
+  tenant?: { id: string };
+  session?: { id: string };
+  task?: { id: string; purpose?: string };
+  environment: string;
+  server: DvarAction["server"];
+  tool: DvarAction["tool"];
+  arguments: unknown;
+  argumentsHash: string;
+  resources?: DvarResource[];
+  resourcesHash?: string;
+  destination?: DvarAction["destination"];
+  destinationHash?: string;
+  summary: string;
+  reversible?: boolean;
+  risk: DvarRisk;
+}
+
+export interface DvarApprovalGrantClaims {
+  version: "1";
+  id: string;
+  requestId: string;
+  issuer: string;
+  keyId?: string;
+  approver: { id: string; type?: string };
+  scope: DvarApprovalScope;
+  bindings: Record<string, string>;
+  bindingHash: string;
+  policyHash: string;
+  policyVersion: string;
+  ruleId: string;
+  issuedAt: string;
+  expiresAt: string;
+  nonce: string;
+  maxUses: number;
+}
+
+export interface DvarApprovalGrant {
+  token: string;
+  claims: DvarApprovalGrantClaims;
+}
+
+export interface DvarApprovalGrantIssueOptions {
+  approver: { id: string; type?: string };
+  expiresInSeconds?: number;
+  maxUses?: number;
+  keyId?: string;
+}
+
+export interface DvarApprovalSigner {
+  readonly issuer: string;
+  issue(
+    request: DvarApprovalRequest,
+    options: DvarApprovalGrantIssueOptions
+  ): DvarApprovalGrant | Promise<DvarApprovalGrant>;
+  verify(token: string): DvarApprovalGrantClaims | Promise<DvarApprovalGrantClaims>;
+}
+
+export interface DvarApprovalUseResult {
+  accepted: boolean;
+  uses: number;
+  reason?: "expired" | "replayed";
+}
+
+export interface DvarApprovalUseStore {
+  consume(
+    nonce: string,
+    maxUses: number,
+    expiresAt: string
+  ): DvarApprovalUseResult | Promise<DvarApprovalUseResult>;
+}
+
+export type DvarApprovalProviderStatus = "pending" | "approved" | "rejected";
+
+export interface DvarApprovalProviderResult {
+  status: DvarApprovalProviderStatus;
+  requestId: string;
+  grant?: string;
+  approver?: { id: string; type?: string };
+  reason?: string;
+}
+
+export interface DvarApprovalProvider {
+  readonly name: string;
+  request(request: DvarApprovalRequest): Promise<DvarApprovalProviderResult>;
+}
+
+export interface DvarApprovalRuntimeOptions {
+  signer: DvarApprovalSigner;
+  provider?: DvarApprovalProvider;
+  useStore?: DvarApprovalUseStore;
+  autoRequest?: boolean;
+}
+
+export interface DvarEvaluationOptions {
+  approvalGrant?: string;
+}
+
 export interface DvarAuditEvent {
   type:
     | "dvar.action.proposed"
     | "dvar.action.allowed"
     | "dvar.action.denied"
     | "dvar.action.approval_required"
+    | "dvar.action.approved"
+    | "dvar.action.rejected"
+    | "dvar.approval.requested"
+    | "dvar.approval.pending"
+    | "dvar.approval.consumed"
+    | "dvar.approval.replay_detected"
+    | "dvar.approval.provider_error"
     | "dvar.integrity.mismatch"
     | "dvar.runtime.internal_error";
   timestamp: string;
@@ -206,6 +351,12 @@ export interface DvarAuditEvent {
   policyHash?: string;
   risk?: DvarRisk;
   durationMs?: number;
+  approvalRequestId?: string;
+  approvalGrantId?: string;
+  approvalScope?: DvarApprovalScope;
+  approvalProvider?: string;
+  approverId?: string;
+  approvalStatus?: DvarApprovalStatus | DvarApprovalProviderStatus;
 }
 
 export type DvarEventSink = (
@@ -217,6 +368,7 @@ export interface DvarCreateOptions {
   policy?: DvarPolicy;
   lockfilePath?: string;
   lockfile?: DvarLockfile;
+  approval?: DvarApprovalRuntimeOptions;
   eventSink?: DvarEventSink;
 }
 
@@ -231,6 +383,7 @@ export interface DvarToolContext {
   destination?: { type: string; value: string };
   trace?: DvarAction["trace"];
   metadata?: Record<string, unknown>;
+  approvalGrant?: string;
 }
 
 export interface DvarToolDefinition<TArguments, TResult> {
@@ -355,4 +508,5 @@ export interface DvarMcpProxyContext {
   environment: string;
   tenant?: { id: string };
   session?: { id: string };
+  approvalGrant?: string;
 }

@@ -47,10 +47,7 @@ export const DVAR_POLICY_SCHEMA = {
         onCapabilityExpansion: { enum: ["allow", "deny", "require_approval"] }
       }
     },
-    rules: {
-      type: "array",
-      items: { $ref: "#/$defs/rule" }
-    },
+    rules: { type: "array", items: { $ref: "#/$defs/rule" } },
     tests: {
       type: "array",
       items: {
@@ -132,9 +129,16 @@ export const DVAR_POLICY_SCHEMA = {
           type: "object",
           additionalProperties: false,
           properties: {
-            provider: { type: "string" },
-            expiresInSeconds: { type: "integer", minimum: 1 },
-            bind: { type: "array", uniqueItems: true, items: { type: "string" } }
+            provider: { type: "string", minLength: 1, maxLength: 128 },
+            expiresInSeconds: { type: "integer", minimum: 1, maximum: 86400 },
+            bind: {
+              type: "array",
+              uniqueItems: true,
+              maxItems: 32,
+              items: { type: "string", minLength: 1, maxLength: 128 }
+            },
+            scope: { enum: ["once", "session", "task"] },
+            maxUses: { type: "integer", minimum: 1, maximum: 100 }
           }
         },
         message: { type: "string", maxLength: 1000 }
