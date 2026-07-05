@@ -2,7 +2,7 @@
 
 All notable changes to Dvar are documented here. Dvar follows prerelease semantic versioning until 1.0.
 
-## 0.7.0-alpha.0
+## 0.7.0
 
 ### Added
 
