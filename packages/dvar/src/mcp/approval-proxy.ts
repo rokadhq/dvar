@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { IncomingMessage } from "node:http";
 import { performance } from "node:perf_hooks";
+import { createOutputGuard } from "../output-guard/index.js";
 import type {
   DvarAction,
   DvarDecision,
@@ -178,6 +179,63 @@ async function authorizeForProxy(
   }
 }
 
+function cloneHeaders(response: Response): Headers {
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return headers;
+}
+
+function mediaType(response: Response): string | undefined {
+  return response.headers.get("content-type") ?? undefined;
+}
+
+async function filterMcpResponse(
+  response: Response,
+  action: DvarAction | undefined,
+  outputGuard: ReturnType<typeof createOutputGuard> | undefined
+): Promise<Response> {
+  if (outputGuard === undefined || response.body === null) return response;
+  const type = mediaType(response);
+  if (type?.toLowerCase().includes("text/event-stream")) return response;
+
+  const text = await response.text();
+  const jsonLike = type?.toLowerCase().includes("json") ?? false;
+  let value: unknown = text;
+  if (jsonLike) {
+    try {
+      value = JSON.parse(text);
+    } catch {
+      value = text;
+    }
+  }
+  const filtered = outputGuard.filter({
+    ...(action !== undefined ? { action } : {}),
+    value,
+    ...(type !== undefined ? { mediaType: type } : {}),
+    source: "mcp"
+  });
+  if (filtered.summary.status === "denied") {
+    return new Response(JSON.stringify({
+      error: "Dvar MCP output denied",
+      dvar: {
+        reasonCode: filtered.summary.reasonCode,
+        deniedRuleId: filtered.summary.deniedRuleId,
+        contentType: filtered.summary.contentType,
+        bytes: filtered.summary.bytes
+      }
+    }), {
+      status: 502,
+      headers: { "content-type": "application/json" }
+    });
+  }
+  const body = jsonLike ? JSON.stringify(filtered.value) : String(filtered.value);
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: cloneHeaders(response)
+  });
+}
+
 /**
  * Approval- and runtime-safety-aware MCP proxy facade.
  *
@@ -190,6 +248,9 @@ export function createMcpHttpProxy(
 ): DvarMcpProxy {
   const runtimeContext = new AsyncLocalStorage<ProxyRuntimeContext>();
   const upstreamFetch = options.fetch ?? globalThis.fetch;
+  const outputGuard = options.outputGuard === undefined
+    ? undefined
+    : createOutputGuard(options.outputGuard);
   const runtime = new Proxy(options.runtime, {
     get(target, property, receiver) {
       if (property !== "evaluate") {
@@ -223,7 +284,7 @@ export function createMcpHttpProxy(
           durationMs: performance.now() - startedAt
         });
       }
-      return response;
+      return filterMcpResponse(response, actions[0], outputGuard);
     } catch (error) {
       for (const action of actions) {
         await options.runtime.recordOutcome(action, {

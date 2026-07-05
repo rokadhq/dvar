@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import "./runtime-safety/augment.js";
+import "./output-guard/augment.js";
 import {
   createApprovalRequest as buildApprovalRequest,
   InMemoryApprovalUseStore,
@@ -34,6 +35,7 @@ import {
 } from "./approvals/events.js";
 import { evaluateIntegrity } from "./integrity.js";
 import { findLockedTool, loadLockfile, validateLockfile } from "./lockfile.js";
+import { createOutputGuard, DvarOutputPolicyError, type DvarOutputGuardSummary } from "./output-guard/index.js";
 import { evaluatePolicy, type EvaluateOptions } from "./policy/engine.js";
 import { loadPolicy, validatePolicy } from "./policy/load.js";
 import { assessRisk } from "./risk.js";
@@ -204,6 +206,47 @@ async function runtimeStoreFailureDecision(
   };
 }
 
+function outputPolicyDecision(
+  policy: DvarPolicy,
+  decision: DvarDecision,
+  summary: DvarOutputGuardSummary
+): DvarDecision {
+  const monitor = policy.mode === "monitor";
+  const off = policy.mode === "off";
+  const { observedEffect: _observedEffect, ...base } = decision;
+  return {
+    ...base,
+    effect: monitor || off ? "allow" : "deny",
+    ...(monitor ? { observedEffect: "would_deny" as const } : {}),
+    ruleId: "system.output_guard",
+    reasonCode: summary.reasonCode ?? "output.denied",
+    message: summary.message ?? "Tool output denied by Dvar output policy",
+    outputSafety: summary
+  };
+}
+
+function outputFilterErrorDecision(
+  policy: DvarPolicy,
+  decision: DvarDecision,
+  summary: DvarOutputGuardSummary
+): DvarDecision {
+  const allow = policy.mode !== "strict"
+    && policy.runtime?.onOutputFilterError === "allow";
+  const monitor = policy.mode === "monitor";
+  const { observedEffect: _observedEffect, ...base } = decision;
+  return {
+    ...base,
+    effect: allow || monitor ? "allow" : "deny",
+    ...(monitor ? { observedEffect: "would_deny" as const } : {}),
+    ruleId: "system.output_guard",
+    reasonCode: allow ? "output.filter_error_fail_open" : "output.filter_error",
+    message: allow
+      ? "Output filtering failed and policy explicitly allowed fail-open return"
+      : summary.message ?? "Output filtering failed",
+    outputSafety: summary
+  };
+}
+
 function requiresApproval(decision: DvarDecision): boolean {
   return decision.effect === "require_approval";
 }
@@ -227,6 +270,9 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const approvalUseStore = options.approval?.useStore ?? new InMemoryApprovalUseStore();
   const runtimeGuard = createRuntimeGuard(policy, options.runtimeSafety);
+  const outputGuard = options.outputGuard === undefined
+    ? undefined
+    : createOutputGuard(options.outputGuard);
   const runtimeStoreKind = options.runtimeSafety?.store?.kind ?? "memory";
   const runtimeStoreDistributed = options.runtimeSafety?.store?.distributed ?? false;
 
@@ -355,6 +401,45 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
     }
   }
 
+  async function filterOutputInternal<TResult>(
+    action: DvarAction,
+    decision: DvarDecision,
+    value: TResult
+  ): Promise<TResult> {
+    if (outputGuard === undefined) return value;
+    try {
+      const filtered = outputGuard.filter({
+        action,
+        value,
+        contentType: "json",
+        source: action.server.transport === "stdio" ? "stdio" : "tool"
+      });
+      const outputDecision = filtered.summary.status === "denied"
+        ? outputPolicyDecision(policy, decision, filtered.summary)
+        : { ...decision, outputSafety: filtered.summary };
+      await emitSafely(options.eventSink, decisionEvent(action, outputDecision));
+      if (filtered.summary.status === "denied") {
+        if (outputDecision.effect === "deny") throw new DvarOutputPolicyError(filtered.summary);
+        return value;
+      }
+      return filtered.value;
+    } catch (error) {
+      if (error instanceof DvarOutputPolicyError) throw error;
+      const summary: DvarOutputGuardSummary = {
+        status: "denied",
+        contentType: "unknown",
+        bytes: 0,
+        redactions: [],
+        reasonCode: "output.filter_error",
+        message: error instanceof Error ? error.message : "Output filtering failed"
+      };
+      const outputDecision = outputFilterErrorDecision(policy, decision, summary);
+      await emitSafely(options.eventSink, decisionEvent(action, outputDecision));
+      if (outputDecision.effect === "deny") throw new DvarOutputPolicyError(summary);
+      return value;
+    }
+  }
+
   async function createRequest(
     action: DvarAction,
     suppliedDecision?: DvarDecision
@@ -452,7 +537,7 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
           success: true,
           durationMs: performance.now() - executionStartedAt
         });
-        return result;
+        return filterOutputInternal(action, decision, result);
       } catch (error) {
         try {
           await recordOutcomeInternal(action, {

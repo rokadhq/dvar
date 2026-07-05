@@ -5,6 +5,7 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { sha256 } from "../canonical.js";
 import { DvarConfigurationError } from "../errors.js";
 import { findLockedServer } from "../lockfile.js";
+import type { DvarOutputGuardOptions } from "../output-guard/index.js";
 import type { DvarRuntime } from "../runtime.js";
 import type {
   DvarAction,
@@ -39,6 +40,7 @@ export interface DvarMcpProxyOptions {
   maxBodyBytes?: number;
   fetch?: typeof globalThis.fetch;
   inventory?: DvarInventory;
+  outputGuard?: DvarOutputGuardOptions;
   contextResolver?: (
     request: IncomingMessage
   ) => DvarMcpProxyContext | Promise<DvarMcpProxyContext>;

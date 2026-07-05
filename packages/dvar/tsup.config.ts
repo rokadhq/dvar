@@ -8,6 +8,7 @@ export default defineConfig([
       approvals: "src/approvals/index.ts",
       "runtime-safety": "src/runtime-safety/index.ts",
       stdio: "src/stdio/index.ts",
+      "output-guard": "src/output-guard/index.ts",
       "openai-agents": "src/adapters/openai-agents.ts"
     },
     format: ["esm", "cjs"],

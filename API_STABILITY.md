@@ -9,13 +9,14 @@ The following are deliberate contracts but may still evolve with documented migr
 - approval scopes: `once`, `session`, `task`;
 - runtime metrics: `calls`, `cost`, `monetary`;
 - runtime scope dimensions: global, principal, agent, tenant, session, task, environment, server, tool, destination;
+- output guard statuses: `allowed`, `redacted`, `denied`;
+- output content classes: `json`, `text`, `binary`, `unknown`;
 - side-effect-free `evaluate()` and execution-time `authorize()` separation;
-- stdio executable identity fields: command, realpath, SHA-256, package name, and package version;
 - stdio supervisor default of `shell: false` and no parent-environment inheritance;
 - canonical policy, inventory, and lockfile names;
 - versioned policy, inventory, lockfile, and approval request records;
 - stable machine-readable reason-code namespace.
 
-The MCP scanner/proxy, inferred capability vocabulary, inventory-diff taxonomy, approval-provider and approval-use-store interfaces, compact grant format, runtime-store interface, Redis/Valkey adapters, quota reservation semantics, stdio supervisor policy shape, local package metadata discovery, loop fingerprints, circuit-breaker outcome interpretation, and framework adapters remain experimental before 1.0. Breaking changes require release notes and migration guidance.
+The MCP scanner/proxy, output-guard policy shape, built-in redaction patterns, inferred capability vocabulary, inventory-diff taxonomy, approval-provider and approval-use-store interfaces, compact grant format, runtime-store interface, Redis/Valkey adapters, quota reservation semantics, stdio supervisor policy shape, local package metadata discovery, loop fingerprints, circuit-breaker outcome interpretation, and framework adapters remain experimental before 1.0. Breaking changes require release notes and migration guidance.
 
 A stable 1.x release will preserve valid schema-version-1 policies within the documented compatibility guarantees.

@@ -28,6 +28,21 @@ export function proposedEvent(action: DvarAction, actionHash: string): DvarAudit
   };
 }
 
+function outputFields(decision: DvarDecision): Partial<DvarAuditEvent> {
+  const output = decision.outputSafety;
+  if (output === undefined) return {};
+  const redactionCount = output.redactions.reduce((total, redaction) => total + redaction.count, 0);
+  return {
+    outputStatus: output.status,
+    outputContentType: output.contentType,
+    outputBytes: output.bytes,
+    ...(output.maxBytes !== undefined ? { outputMaxBytes: output.maxBytes } : {}),
+    outputRedactionCount: redactionCount,
+    ...(output.deniedRuleId !== undefined ? { outputDeniedRuleId: output.deniedRuleId } : {}),
+    ...(output.untrusted !== undefined ? { outputUntrusted: output.untrusted } : {})
+  };
+}
+
 export function decisionEvent(action: DvarAction, decision: DvarDecision): DvarAuditEvent {
   const type = decision.effect === "deny"
     ? "dvar.action.denied"
@@ -57,6 +72,7 @@ export function decisionEvent(action: DvarAction, decision: DvarDecision): DvarA
     policyHash: decision.policyHash,
     risk: decision.risk,
     durationMs: decision.durationMs,
+    ...outputFields(decision),
     ...(runtime !== undefined
       ? {
           runtimeControl: runtime.control,
@@ -95,7 +111,8 @@ export function internalErrorEvent(
     policyVersion: decision.policyVersion,
     policyHash: decision.policyHash,
     risk: decision.risk,
-    durationMs: decision.durationMs
+    durationMs: decision.durationMs,
+    ...outputFields(decision)
   };
 }
 
