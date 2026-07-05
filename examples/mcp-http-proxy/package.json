@@ -1,0 +1,11 @@
+{
+  "name": "@dvar-examples/mcp-http-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node demo.mjs"
+  },
+  "dependencies": {
+    "@rokadhq/dvar": "*"
+  }
+}

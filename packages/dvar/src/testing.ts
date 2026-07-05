@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expandDottedObject } from "./object-path.js";
 import { createDvar } from "./runtime.js";
-import type { DvarAction, DvarPolicy, DvarPolicyTestResult } from "./types.js";
+import type { DvarAction, DvarLockfile, DvarPolicy, DvarPolicyTestResult } from "./types.js";
 
 function fixtureAction(input: Record<string, unknown>): DvarAction {
   const expanded = expandDottedObject(input);
@@ -23,9 +23,19 @@ function fixtureAction(input: Record<string, unknown>): DvarAction {
   };
 }
 
-export async function runPolicyTests(policy: DvarPolicy): Promise<DvarPolicyTestResult[]> {
+export interface DvarPolicyTestOptions {
+  lockfile?: DvarLockfile;
+}
+
+export async function runPolicyTests(
+  policy: DvarPolicy,
+  options: DvarPolicyTestOptions = {}
+): Promise<DvarPolicyTestResult[]> {
   const enforcedPolicy: DvarPolicy = { ...policy, mode: "enforce" };
-  const runtime = await createDvar({ policy: enforcedPolicy });
+  const runtime = await createDvar({
+    policy: enforcedPolicy,
+    ...(options.lockfile !== undefined ? { lockfile: options.lockfile } : {})
+  });
   const results: DvarPolicyTestResult[] = [];
 
   for (const test of policy.tests ?? []) {

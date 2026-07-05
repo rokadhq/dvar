@@ -3,8 +3,16 @@ import { performance } from "node:perf_hooks";
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import { sha256 } from "./canonical.js";
 import { DvarApprovalRequiredError, DvarConfigurationError, DvarDeniedError } from "./errors.js";
-import { decisionEvent, emitSafely, internalErrorEvent, proposedEvent } from "./events.js";
+import {
+  decisionEvent,
+  emitSafely,
+  integrityMismatchEvent,
+  internalErrorEvent,
+  proposedEvent
+} from "./events.js";
 import { loadPolicy, validatePolicy } from "./policy/load.js";
+import { evaluateIntegrity } from "./integrity.js";
+import { findLockedTool, loadLockfile, validateLockfile } from "./lockfile.js";
 import { evaluatePolicy, type EvaluateOptions } from "./policy/engine.js";
 import { assessRisk } from "./risk.js";
 import type {
@@ -12,6 +20,8 @@ import type {
   DvarCreateOptions,
   DvarDecision,
   DvarPolicy,
+  DvarLockfile,
+  DvarInventoryTool,
   DvarProtectedTool,
   DvarToolContext,
   DvarToolDefinition
@@ -20,7 +30,9 @@ import type {
 export interface DvarRuntime {
   readonly policy: DvarPolicy;
   readonly policyHash: string;
+  readonly lockfile?: DvarLockfile;
   evaluate(action: DvarAction): Promise<DvarDecision>;
+  lockedTool(serverId: string, toolName: string, endpoint?: string): DvarInventoryTool | undefined;
   protectTool<TArguments, TResult>(
     definition: DvarToolDefinition<TArguments, TResult>
   ): DvarProtectedTool<TArguments, TResult>;
@@ -64,10 +76,18 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
   if (options.policy !== undefined && options.policyPath !== undefined) {
     throw new DvarConfigurationError("Provide either policy or policyPath, not both");
   }
+  if (options.lockfile !== undefined && options.lockfilePath !== undefined) {
+    throw new DvarConfigurationError("Provide either lockfile or lockfilePath, not both");
+  }
   const policy = options.policy !== undefined
     ? validatePolicy(options.policy)
     : await loadPolicy(options.policyPath ?? "dvar.yaml");
   const policyHash = sha256(policy);
+  const lockfile = options.lockfile !== undefined
+    ? validateLockfile(options.lockfile)
+    : options.lockfilePath !== undefined
+      ? await loadLockfile(options.lockfilePath)
+      : undefined;
   const ajv = new Ajv2020({ allErrors: true, strict: false });
 
   async function evaluateInternal(
@@ -91,8 +111,16 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
     await emitSafely(options.eventSink, proposedEvent(action, actionHash));
 
     try {
-      const decision = evaluatePolicy(policy, policyHash, action, evaluateOptions);
+      const integrityFailure = evaluateIntegrity(policy, lockfile, action);
+      const decision = evaluatePolicy(policy, policyHash, action, {
+        ...evaluateOptions,
+        ...(evaluateOptions.guardrailFailure === undefined && integrityFailure !== undefined
+          ? { guardrailFailure: integrityFailure }
+          : {})
+      });
       await emitSafely(options.eventSink, decisionEvent(action, decision));
+      const integrityEvent = integrityMismatchEvent(action, decision);
+      if (integrityEvent !== undefined) await emitSafely(options.eventSink, integrityEvent);
       return decision;
     } catch {
       const configuredEffect = policy.runtime?.onEvaluationError === "allow" ? "allow" : "deny";
@@ -148,7 +176,10 @@ export async function createDvar(options: DvarCreateOptions = {}): Promise<DvarR
   return {
     policy,
     policyHash,
+    ...(lockfile !== undefined ? { lockfile } : {}),
     evaluate: evaluateInternal,
+    lockedTool: (serverId: string, toolName: string, endpoint?: string) =>
+      findLockedTool(lockfile, serverId, toolName, endpoint),
     protectTool
   };
 }

@@ -54,6 +54,9 @@ export interface DvarAction {
     capabilities?: string[];
     annotations?: Record<string, unknown>;
     schemaHash?: string;
+    outputSchemaHash?: string;
+    descriptionHash?: string;
+    annotationsHash?: string;
   };
   arguments: unknown;
   resources?: DvarResource[];
@@ -134,6 +137,15 @@ export interface DvarRule {
   message?: string;
 }
 
+export interface DvarIntegrityPolicy {
+  requireLockfile?: boolean;
+  onUnknownServer?: DvarEffect;
+  onUnknownTool?: DvarEffect;
+  onDescriptionChange?: DvarEffect;
+  onSchemaChange?: DvarEffect;
+  onCapabilityExpansion?: DvarEffect;
+}
+
 export interface DvarRuntimePolicy {
   onEvaluationError?: "allow" | "deny";
   onDecisionTimeout?: "allow" | "deny";
@@ -162,6 +174,7 @@ export interface DvarPolicy {
   defaultEffect: DvarEffect;
   runtime?: DvarRuntimePolicy;
   identity?: { require?: string[] };
+  integrity?: DvarIntegrityPolicy;
   rules?: DvarRule[];
   tests?: DvarPolicyTest[];
 }
@@ -172,6 +185,7 @@ export interface DvarAuditEvent {
     | "dvar.action.allowed"
     | "dvar.action.denied"
     | "dvar.action.approval_required"
+    | "dvar.integrity.mismatch"
     | "dvar.runtime.internal_error";
   timestamp: string;
   actionId: string;
@@ -201,6 +215,8 @@ export type DvarEventSink = (
 export interface DvarCreateOptions {
   policyPath?: string;
   policy?: DvarPolicy;
+  lockfilePath?: string;
+  lockfile?: DvarLockfile;
   eventSink?: DvarEventSink;
 }
 
@@ -236,4 +252,107 @@ export interface DvarPolicyTestResult {
   expected: DvarPolicyTest["expect"];
   decision?: DvarDecision;
   error?: string;
+}
+
+export interface DvarMcpToolDefinition {
+  name: string;
+  title?: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+}
+
+export interface DvarInventoryTool {
+  name: string;
+  title?: string;
+  description?: string;
+  descriptionSha256: string;
+  inputSchema: Record<string, unknown>;
+  inputSchemaSha256: string;
+  outputSchema?: Record<string, unknown>;
+  outputSchemaSha256?: string;
+  annotations?: Record<string, unknown>;
+  annotationsSha256: string;
+  capabilities: string[];
+  risk: DvarRiskLevel;
+  definitionSha256: string;
+}
+
+export interface DvarInventoryServer {
+  id: string;
+  transport: "streamable-http" | "stdio";
+  endpoint?: string;
+  command?: string;
+  protocolVersion?: string;
+  serverInfo?: { name?: string; version?: string; [key: string]: unknown };
+  advertisedCapabilities?: Record<string, unknown>;
+  identity: { type: "url" | "command"; value: string };
+  integrity: { manifestSha256: string };
+  tools: DvarInventoryTool[];
+}
+
+export interface DvarInventory {
+  inventoryVersion: "1";
+  generatedAt: string;
+  servers: DvarInventoryServer[];
+}
+
+export interface DvarLockfile {
+  lockfileVersion: "1";
+  generatedAt: string | null;
+  servers: DvarInventoryServer[];
+}
+
+export type DvarInventoryChangeType =
+  | "server.added"
+  | "server.removed"
+  | "server.endpoint_changed"
+  | "server.integrity_changed"
+  | "tool.added"
+  | "tool.removed"
+  | "tool.description_changed"
+  | "tool.input_schema_widened"
+  | "tool.input_schema_narrowed"
+  | "tool.input_schema_changed"
+  | "tool.output_schema_changed"
+  | "tool.annotations_changed"
+  | "tool.capability_expanded"
+  | "tool.capability_reduced"
+  | "tool.risk_changed";
+
+export interface DvarInventoryChange {
+  type: DvarInventoryChangeType;
+  serverId: string;
+  toolName?: string;
+  risk: DvarRiskLevel;
+  reasonCode: string;
+  message: string;
+  beforeHash?: string;
+  afterHash?: string;
+}
+
+export interface DvarInventoryDiff {
+  clean: boolean;
+  highestRisk: DvarRiskLevel;
+  changes: DvarInventoryChange[];
+}
+
+export interface DvarMcpScanOptions {
+  endpoint: string | URL;
+  serverId?: string;
+  headers?: Record<string, string>;
+  allowInsecureHttp?: boolean;
+  fetch?: typeof globalThis.fetch;
+  protocolVersion?: string;
+  timeoutMs?: number;
+}
+
+export interface DvarMcpProxyContext {
+  principal: DvarPrincipal;
+  agent: DvarAgent;
+  environment: string;
+  tenant?: { id: string };
+  session?: { id: string };
 }

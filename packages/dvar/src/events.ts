@@ -59,7 +59,6 @@ export function decisionEvent(action: DvarAction, decision: DvarDecision): DvarA
   };
 }
 
-
 export function internalErrorEvent(
   action: DvarAction,
   decision: DvarDecision
@@ -85,5 +84,29 @@ export function internalErrorEvent(
     policyHash: decision.policyHash,
     risk: decision.risk,
     durationMs: decision.durationMs
+  };
+}
+
+const INTEGRITY_REASON_CODES = new Set([
+  "tool.lockfile_missing",
+  "tool.unknown_server",
+  "tool.unlocked",
+  "tool.schema_changed",
+  "tool.output_schema_changed",
+  "tool.description_changed",
+  "tool.annotations_changed",
+  "tool.capability_expanded",
+  "tool.manifest_changed",
+  "destination.changed"
+]);
+
+export function integrityMismatchEvent(
+  action: DvarAction,
+  decision: DvarDecision
+): DvarAuditEvent | undefined {
+  if (!INTEGRITY_REASON_CODES.has(decision.reasonCode)) return undefined;
+  return {
+    ...decisionEvent(action, decision),
+    type: "dvar.integrity.mismatch"
   };
 }
