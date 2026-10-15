@@ -2,13 +2,20 @@
 
 Dvar is the policy firewall for AI agents. It evaluates proposed tool actions and enforces policy, approvals, integrity, runtime safety, local-tool hardening, output protection, and framework-adapter controls around side effects.
 
-> **Status:** `0.7.0` on npm's `alpha` channel. Policy, approval, runtime-safety, stdio, output-guard, MCP, and framework-adapter contracts remain pre-stable.
+> **Status:** v1.0 development; publication is on hold. All 55 features in the [v1 implementation plan](docs/v1/IMPLEMENTATION_PLAN.md) must be qualified before the first v1 release. The existing 0.7.0 code is a development baseline, not a production sign-off.
 
-## Install
+## Develop locally
+
+No alpha/beta release is planned. From a repository checkout:
 
 ```bash
-npm install @rokadhq/dvar@alpha
+npm install
+npm run check
 ```
+
+`npm run check:v1-release` deliberately fails until all feature and release gates
+are approved. `npm publish` is also gated. See the [network-security foundation](docs/network-security.md)
+for the first v1 development slice. Historical v0.7 APIs below remain pre-stable.
 
 ## What v0.7 adds
 
@@ -60,6 +67,8 @@ const result = await generateText({
 The adapter preserves the framework-facing tool shape and routes execution through Dvar. The original unwrapped tool object is not protected.
 
 ## Other active surfaces
+
+- `@rokadhq/dvar/network` for explicit, default-deny, IP-pinned bounded HTTP(S) requests.
 
 - `@rokadhq/dvar/runtime-safety` for quotas, loop detection, circuit breakers, Redis/Valkey stores, and diagnostics.
 - `@rokadhq/dvar/output-guard` for output classification, redaction, and blocking.

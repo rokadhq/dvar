@@ -5,6 +5,7 @@ export default defineConfig([
     entry: {
       index: "src/index.ts",
       mcp: "src/mcp/index.ts",
+      network: "src/network/index.ts",
       approvals: "src/approvals/index.ts",
       "runtime-safety": "src/runtime-safety/index.ts",
       stdio: "src/stdio/index.ts",
