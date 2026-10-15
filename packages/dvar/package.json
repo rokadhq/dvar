@@ -98,6 +98,11 @@
       "types": "./dist/telemetry.d.ts",
       "import": "./dist/telemetry.js",
       "require": "./dist/telemetry.cjs"
+    },
+    "./authority": {
+      "types": "./dist/authority.d.ts",
+      "import": "./dist/authority.js",
+      "require": "./dist/authority.cjs"
     }
   },
   "scripts": {

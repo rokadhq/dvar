@@ -17,14 +17,16 @@
     "test": "npm run test --workspace=@rokadhq/dvar",
     "test:coverage": "npm run test:coverage --workspace=@rokadhq/dvar",
     "typecheck": "npm run typecheck --workspace=@rokadhq/dvar",
-    "check": "npm run check:v1-plan && npm run typecheck && npm test && npm run build && npm run test:network && npm run test:quota && npm run test:telemetry",
+    "check": "npm run check:v1-plan && npm run typecheck && npm test && npm run build && npm run test:network && npm run test:quota && npm run test:telemetry && npm run test:authority",
     "check:v1-plan": "node scripts/check-v1-plan.mjs",
     "check:v1-release": "node scripts/check-v1-release.mjs",
     "test:network": "node scripts/test-network.mjs",
     "test:quota": "node scripts/test-quota.mjs",
     "test:quota:live": "node --test packages/dvar/test-quota/quota-live.node.mjs",
     "test:telemetry": "node scripts/test-telemetry.mjs",
-    "test:telemetry:sdk": "node --test packages/dvar/test-telemetry/sdk/sdk.node.mjs"
+    "test:telemetry:sdk": "node --test packages/dvar/test-telemetry/sdk/sdk.node.mjs",
+    "test:authority": "node scripts/test-authority.mjs",
+    "test:authority:sqlite": "node --test packages/dvar/test-authority/sqlite.node.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
