@@ -52,9 +52,9 @@ Work follows the dependency graph, not rigid calendar deadlines. For example, st
 | F06 | Shell command security | P1 | M2 | planned |
 | F07 | Process isolation integration | P1 | M2 | planned |
 | F08 | Credential delegation | P1 | M2 | planned |
-| F09 | Resource ownership enforcement | P0 | M2 | planned |
+| F09 | Resource ownership enforcement | P0 | M2 | in_progress |
 | F10 | Transaction-aware authorization | P2 | M3 | planned |
-| F11 | Agent identity and trust levels | P1 | M2 | planned |
+| F11 | Agent identity and trust levels | P1 | M2 | in_progress |
 | F12 | Agent-to-agent authorization | P1 | M2 | planned |
 | F13 | Delegated authority limits | P0 | M2 | planned |
 | F14 | Task-scoped permissions | P1 | M2 | planned |
@@ -155,7 +155,7 @@ Dependencies: F09, F13, F19. Status: `planned`.
 - Bind credentials to principal, tenant, task, audience and expiry; test revocation and verify secrets never reach prompts, logs or approval displays.
 
 ### F09 — Resource ownership enforcement
-Dependencies: F11. Status: `planned`.
+Dependencies: F11. Status: `in_progress`.
 
 - Resolve ownership through a trusted application/provider interface before resource-specific side effects and bind the resource version where required.
 - Fail closed on missing, stale or cross-tenant ownership; cover confused-deputy and check/use races with integration tests.
@@ -167,7 +167,7 @@ Dependencies: F17, F20. Status: `planned`.
 - Test partial execution, replay, cancellation, changed transaction payloads and compensation; do not imply arbitrary external side effects are atomic.
 
 ### F11 — Agent identity and trust levels
-Dependencies: none. Status: `planned`.
+Dependencies: none. Status: `in_progress`.
 
 - Establish application-verified agent identity, roles, tenant, issuer and trust attributes independently of model-generated arguments.
 - Reject forged, missing and stale identity evidence; audit the verified source and keep Dvar separate from an identity provider.
@@ -462,3 +462,8 @@ F55 has started with opt-in atomic quota admission and bounded idempotency recei
 ## Slice 03 status
 
 F53 has started with opt-in OpenTelemetry API/SDK injection, a runtime observation facade, bounded metrics, explicit W3C context propagation, and privacy-safe decision/approval/output observations. See `progress/slice-03-opentelemetry.md` for local contract-test evidence and outstanding SDK/runtime/exporter qualification. All acceptance criteria remain unchanged; no feature is verified and publication remains on hold.
+
+
+## Slice 04 status
+
+F11 and F09 have started with an opt-in identity-verifying, resource-ownership boundary around existing Dvar protected tools. Identity claims are provided by a trusted application verifier, not model arguments. The boundary rechecks identity and ownership/version before dispatch; executor-side conditional writes remain required. See `progress/slice-04-identity-ownership.md` for verified local evidence and pending real runtime/provider qualification. All 55 acceptance criteria and release approvals are unchanged. Publication remains on hold.
