@@ -93,6 +93,11 @@
       "types": "./dist/network.d.ts",
       "import": "./dist/network.js",
       "require": "./dist/network.cjs"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry.d.ts",
+      "import": "./dist/telemetry.js",
+      "require": "./dist/telemetry.cjs"
     }
   },
   "scripts": {

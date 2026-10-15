@@ -6,6 +6,7 @@ export default defineConfig([
       index: "src/index.ts",
       mcp: "src/mcp/index.ts",
       network: "src/network/index.ts",
+      telemetry: "src/telemetry/index.ts",
       approvals: "src/approvals/index.ts",
       "runtime-safety": "src/runtime-safety/index.ts",
       stdio: "src/stdio/index.ts",

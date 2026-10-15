@@ -1,0 +1,19 @@
+{
+  "name": "dvar-opentelemetry-sdk-qualification",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test sdk.node.mjs",
+    "typecheck": "tsc --noEmit --strict --exactOptionalPropertyTypes --noUncheckedIndexedAccess --target ES2022 --module NodeNext --moduleResolution NodeNext --types node --skipLibCheck consumer.ts"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/context-async-hooks": "2.2.0",
+    "@opentelemetry/sdk-trace-base": "2.2.0",
+    "@opentelemetry/sdk-metrics": "2.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "typescript": "5.8.3"
+  }
+}
