@@ -32,7 +32,8 @@
     "SECURITY.md",
     "SUPPORT.md",
     "API_STABILITY.md",
-    "LICENSE"
+    "LICENSE",
+    "scripts"
   ],
   "bin": {
     "dvar": "./dist/cli.js"
@@ -87,6 +88,11 @@
       "types": "./dist/openai-agents.d.ts",
       "import": "./dist/openai-agents.js",
       "require": "./dist/openai-agents.cjs"
+    },
+    "./network": {
+      "types": "./dist/network.d.ts",
+      "import": "./dist/network.js",
+      "require": "./dist/network.cjs"
     }
   },
   "scripts": {
@@ -94,7 +100,8 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "node scripts/prepublish.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",

@@ -25,3 +25,11 @@ This index and the six linked parts together form Dvar’s authoritative source 
 The canonical portfolio statement is:
 
 > **Dhal secures requests. Dvar secures actions.**
+
+## Current v1 scope amendment — 15 October 2026
+
+The accepted [v1 scope and release amendment](source-of-truth/part-07-v1-scope-amendment.md)
+supersedes the earlier staged-public-release schedule and deferred-feature decisions
+where they conflict. All [55 tracked features](v1/IMPLEMENTATION_PLAN.md) are required
+before v1 ships; no intervening alpha or beta is to be published. The foundational
+product purpose and non-goals continue to apply.

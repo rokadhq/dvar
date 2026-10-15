@@ -17,7 +17,10 @@
     "test": "npm run test --workspace=@rokadhq/dvar",
     "test:coverage": "npm run test:coverage --workspace=@rokadhq/dvar",
     "typecheck": "npm run typecheck --workspace=@rokadhq/dvar",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run check:v1-plan && npm run typecheck && npm test && npm run build && npm run test:network",
+    "check:v1-plan": "node scripts/check-v1-plan.mjs",
+    "check:v1-release": "node scripts/check-v1-release.mjs",
+    "test:network": "node scripts/test-network.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
