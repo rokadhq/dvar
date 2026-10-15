@@ -96,7 +96,7 @@ Work follows the dependency graph, not rigid calendar deadlines. For example, st
 | F50 | Policy simulator | P1 | M7 | planned |
 | F51 | VS Code extension | P2 | M7 | planned |
 | F52 | Policy migration tools | P1 | M7 | planned |
-| F53 | OpenTelemetry integration | P0 | M1 | planned |
+| F53 | OpenTelemetry integration | P0 | M1 | in_progress |
 | F54 | Security analytics dashboard | P1 | M8 | planned |
 | F55 | Distributed enforcement hardening | P0 | M1 | in_progress |
 
@@ -419,7 +419,7 @@ Dependencies: none. Status: `planned`.
 - Test semantic-preservation fixtures and refusal of lossy migrations without acknowledgment; no silent broadening of permissions.
 
 ### F53 — OpenTelemetry integration
-Dependencies: none. Status: `planned`.
+Dependencies: none. Status: `in_progress`.
 
 - Emit correlated agent/action/tool/approval/output spans and bounded metrics through standard exporters with privacy-safe defaults.
 - Pin the supported semantic-convention version; test Dhal trace correlation, exporter failure isolation, redaction and cardinality limits.
@@ -458,3 +458,7 @@ Protocol and security integration work must use primary specifications pinned in
 ## Slice 02 status
 
 F55 has started with opt-in atomic quota admission and bounded idempotency receipts. See `progress/slice-02-atomic-quotas.md` for the implementation, local verification, and outstanding real-server/runtime qualification. The acceptance criteria above remain unchanged. No feature is verified and publication remains on hold.
+
+## Slice 03 status
+
+F53 has started with opt-in OpenTelemetry API/SDK injection, a runtime observation facade, bounded metrics, explicit W3C context propagation, and privacy-safe decision/approval/output observations. See `progress/slice-03-opentelemetry.md` for local contract-test evidence and outstanding SDK/runtime/exporter qualification. All acceptance criteria remain unchanged; no feature is verified and publication remains on hold.
