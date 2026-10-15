@@ -98,7 +98,7 @@ Work follows the dependency graph, not rigid calendar deadlines. For example, st
 | F52 | Policy migration tools | P1 | M7 | planned |
 | F53 | OpenTelemetry integration | P0 | M1 | planned |
 | F54 | Security analytics dashboard | P1 | M8 | planned |
-| F55 | Distributed enforcement hardening | P0 | M1 | planned |
+| F55 | Distributed enforcement hardening | P0 | M1 | in_progress |
 
 ## Per-feature acceptance criteria
 
@@ -431,7 +431,7 @@ Dependencies: F28, F39, F53. Status: `planned`.
 - Test RBAC, privacy, pagination, filter integrity and degraded telemetry; display missing data rather than invented sample statistics.
 
 ### F55 — Distributed enforcement hardening
-Dependencies: none. Status: `planned`.
+Dependencies: none. Status: `in_progress`.
 
 - Implement atomic multi-control reservations, idempotency, bounded state and recovery for real Redis and Valkey deployments.
 - Run concurrency, partition, reconnect, clock-skew, replay and crash tests; document consistency guarantees, no-double-charge behavior and safe degraded modes.
@@ -453,3 +453,8 @@ Protocol and security integration work must use primary specifications pinned in
 - MCP 2026-07-28 release: https://blog.modelcontextprotocol.io/posts/2026-07-28/
 - Node HTTPS/TLS API: https://nodejs.org/api/https.html
 - IANA IPv4 and IPv6 special-purpose registries: https://www.iana.org/assignments/iana-ipv4-special-registry/ and https://www.iana.org/assignments/iana-ipv6-special-registry/
+
+
+## Slice 02 status
+
+F55 has started with opt-in atomic quota admission and bounded idempotency receipts. See `progress/slice-02-atomic-quotas.md` for the implementation, local verification, and outstanding real-server/runtime qualification. The acceptance criteria above remain unchanged. No feature is verified and publication remains on hold.
